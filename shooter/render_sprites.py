@@ -786,13 +786,20 @@ def draw_rockets(screen: pygame.Surface, rockets: list[Any],
             alpha_core = max(0, int(255 * (1.0 - prog)))
             alpha_mid = max(0, int(200 * (1.0 - prog)))
             alpha_out = max(0, int(140 * (1.0 - prog)))
-            surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(surf, (255, 90, 20, alpha_out), (radius, radius), radius)
+            # Nearby bursts can project to thousands of pixels in radius. Allocate
+            # only the visible region, retaining the original circle geometry.
+            bounds = pygame.Rect(screen_x - radius, cy - radius, radius * 2, radius * 2)
+            visible_bounds = bounds.clip(screen.get_clip())
+            if not visible_bounds:
+                continue
+            center = (screen_x - visible_bounds.x, cy - visible_bounds.y)
+            surf = pygame.Surface(visible_bounds.size, pygame.SRCALPHA)
+            pygame.draw.circle(surf, (255, 90, 20, alpha_out), center, radius)
             pygame.draw.circle(surf, (255, 170, 40, alpha_mid),
-                               (radius, radius), max(2, int(radius * 0.65)))
+                               center, max(2, int(radius * 0.65)))
             pygame.draw.circle(surf, (255, 240, 180, alpha_core),
-                               (radius, radius), max(1, int(radius * 0.32)))
-            screen.blit(surf, (screen_x - radius, cy - radius))
+                               center, max(1, int(radius * 0.32)))
+            screen.blit(surf, visible_bounds.topleft)
         else:
             # Rocket viewed from behind — player sees the engine bell surrounded
             # by fins, with an exhaust plume radiating toward the camera.
