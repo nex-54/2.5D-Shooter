@@ -28,24 +28,25 @@ class FloorCeilingRenderingTests(unittest.TestCase):
         }
         self.screen = pygame.Surface((WIDTH, HEIGHT))
 
-    def test_sampled_pixels_match_original_renderer(self) -> None:
-        # Baseline pixels recorded before optimization, with coordinate-coded
-        # textures so shifts, wrapping, shading and x/y swaps are observable.
+    def test_sampled_pixels_match_recorded_baseline(self) -> None:
+        # Baseline pixels cross-checked against a per-pixel scalar reference,
+        # with coordinate-coded textures so shifts, wrapping, shading and x/y
+        # swaps are observable.
         points = ((0, 0), (173, 61), (512, 200), (1023, 333),
                   (91, 385), (780, 527), (411, 703), (1023, 767))
         cases = (
             ((1.5, 1.5, 0.0, 0),
-             ((56, 9, 39), (85, 25, 59), (75, 90, 75), (8, 27, 17),
-              (12, 7, 10), (28, 47, 47), (139, 71, 98), (82, 27, 58))),
+             ((73, 173, 103), (94, 20, 62), (75, 90, 75), (8, 79, 34),
+              (13, 5, 9), (43, 50, 54), (141, 71, 99), (107, 35, 70))),
             ((5.125, 8.375, 1.9, 137),
-             ((46, 26, 40), (29, 46, 38), (99, 97, 90), (76, 126, 88),
-              (53, 34, 45), (21, 4, 11), (121, 71, 92), (178, 71, 111))),
+             ((48, 46, 48), (29, 54, 41), (99, 97, 90), (50, 160, 86),
+              (56, 77, 61), (12, 5, 8), (121, 73, 92), (148, 89, 110))),
             ((1.5, 1.5, 3.9, 514),
-             ((24, 82, 48), (24, 67, 43), (25, 29, 31), (50, 163, 88),
-              (108, 54, 81), (128, 117, 112), (118, 57, 86), (78, 115, 85))),
+             ((16, 79, 43), (20, 64, 40), (25, 29, 31), (46, 143, 80),
+              (101, 52, 76), (125, 109, 107), (116, 55, 84), (65, 48, 56))),
             ((3.25, 6.75, 6.2, -400),
-             ((1, 2, 3), (110, 74, 85), (20, 92, 69), (59, 51, 62),
-              (32, 59, 57), (190, 134, 148), (160, 107, 125), (146, 146, 140))),
+             ((1, 2, 3), (20, 63, 50), (20, 92, 69), (87, 60, 76),
+              (46, 54, 59), (195, 134, 150), (160, 107, 125), (158, 150, 145))),
         )
         # Return to the initial view after changing both angle and horizon.
         for (px, py, pa, offset), colors in (*cases, cases[0]):
@@ -55,6 +56,22 @@ class FloorCeilingRenderingTests(unittest.TestCase):
                 with self.subTest(pose=(px, py, pa, offset), pixel=point):
                     self.assertEqual(self.screen.get_at(point)[:3], color)
             self.assertFalse(self.screen.get_locked())
+
+    def test_lines_facing_the_camera_stay_straight(self) -> None:
+        # Texel column 0 marks every integer x on the floor and ceiling. Facing
+        # +x, each mark lies at one perpendicular distance, so every screen
+        # column must show it on the same rows; unit-length rays bent them.
+        stripes = np.zeros((TEX_SIZE, TEX_SIZE, 3), np.float32)
+        stripes[0] = 255
+        textures: Textures = {'floor_np': stripes, 'ceil_np': stripes,
+                              'door_np': stripes}
+        self.screen.fill((0, 0, 0))
+        draw_floor_ceiling(self.screen, 1.5, 1.5, 0.0, textures)
+        marked = pygame.surfarray.array3d(self.screen).any(axis=2)
+        self.assertTrue(marked[WIDTH // 2].any())
+        for x in (0, WIDTH // 4, WIDTH - 1):
+            with self.subTest(column=x):
+                np.testing.assert_array_equal(marked[x], marked[WIDTH // 2])
 
     def test_door_ceiling_updates_after_level_layout_changes(self) -> None:
         # This pixel looks up at tile (3, 1). Move/remove doors in the same list,
@@ -78,7 +95,7 @@ class FloorCeilingRenderingTests(unittest.TestCase):
         self.assertEqual(self.screen.get_at((411, 703))[:3], (0, 0, 0))
         draw_floor_ceiling(self.screen, 1.5, 1.5, 0.0, self.textures)
         self.assertEqual(self.screen.get_at((512, 200))[:3], (75, 90, 75))
-        self.assertEqual(self.screen.get_at((411, 703))[:3], (139, 71, 98))
+        self.assertEqual(self.screen.get_at((411, 703))[:3], (141, 71, 99))
 
     def test_reused_buffers_render_to_a_new_surface(self) -> None:
         for bits in (24, 32):
@@ -87,7 +104,7 @@ class FloorCeilingRenderingTests(unittest.TestCase):
                 screen.fill((1, 2, 3))
                 draw_floor_ceiling(screen, 1.5, 1.5, 0.0, self.textures)
                 self.assertEqual(screen.get_at((512, 200))[:3], (75, 90, 75))
-                self.assertEqual(screen.get_at((411, 703))[:3], (139, 71, 98))
+                self.assertEqual(screen.get_at((411, 703))[:3], (141, 71, 99))
                 self.assertFalse(screen.get_locked())
 
 

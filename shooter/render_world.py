@@ -7,6 +7,7 @@ Consumes raycast output (from raycaster.cast_rays) and the textures dict
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import pygame
@@ -62,6 +63,10 @@ class _FloorCeilingRenderer:
             textures['ceil_np'].reshape(-1, 3),
             (textures['door_np'] * 0.65).reshape(-1, 3),
         ))
+        # tan() of each column's angle from the view direction, matching the
+        # column angles in raycaster.cast_rays.
+        self.plane_offsets: NDArray[np.float64] = np.tan(
+            np.linspace(-HALF_FOV, HALF_FOV, WIDTH, endpoint=False))
         self.rows: NDArray[np.float64] = np.arange(HEIGHT, dtype=np.float64)
         self.dists: NDArray[np.float64] = np.empty(HEIGHT, dtype=np.float64)
         self.shades: NDArray[np.float64] = np.empty(HEIGHT, dtype=np.float64)
@@ -90,21 +95,24 @@ class _FloorCeilingRenderer:
                 self.door_grid[c * MAP_H + r] = True
             self.door_positions = doors
 
-        angles = np.linspace(pa - HALF_FOV, pa + HALF_FOV, WIDTH, endpoint=False)
-        cos_r = np.cos(angles)
-        sin_r = np.sin(angles)
+        # Row distances are perpendicular to the view direction, like wall
+        # depths, so rays run to a flat camera plane instead of unit length.
+        # Unit rays bend floor lines into arcs and misalign them with walls.
+        cos_a, sin_a = math.cos(pa), math.sin(pa)
+        ray_x = cos_a - sin_a * self.plane_offsets
+        ray_y = sin_a + cos_a * self.plane_offsets
         # Row-major traversal matches the surface layout and improves locality.
         pix = pygame.surfarray.pixels3d(screen).transpose(1, 0, 2)
         try:
             for start, end, ceiling in ((0, min(HEIGHT, horizon), True),
                                         (max(1, horizon + 1), HEIGHT, False)):
-                self._draw_rows(pix, start, end, ceiling, px, py, cos_r, sin_r)
+                self._draw_rows(pix, start, end, ceiling, px, py, ray_x, ray_y)
         finally:
             del pix
 
     def _draw_rows(self, pix: NDArray[np.uint8], start: int, end: int,
                    ceiling: bool, px: float, py: float,
-                   cos_r: NDArray[np.float64], sin_r: NDArray[np.float64]) -> None:
+                   ray_x: NDArray[np.float64], ray_y: NDArray[np.float64]) -> None:
         for y in range(start, end, self._BATCH_ROWS):
             stop = min(y + self._BATCH_ROWS, end)
             count = stop - y
@@ -112,9 +120,9 @@ class _FloorCeilingRenderer:
             scaled = self.scaled[:count]
             indices, scratch = self.indices[:count], self.scratch[:count]
             samples = self.samples[:count]
-            np.multiply(self.dists[y:stop, None], cos_r[None, :], out=wx)
+            np.multiply(self.dists[y:stop, None], ray_x[None, :], out=wx)
             np.add(wx, px, out=wx)
-            np.multiply(self.dists[y:stop, None], sin_r[None, :], out=wy)
+            np.multiply(self.dists[y:stop, None], ray_y[None, :], out=wy)
             np.add(wy, py, out=wy)
             np.multiply(wx, TEX_SIZE, out=scaled)
             np.copyto(indices, scaled, casting='unsafe')
