@@ -17,6 +17,7 @@ from shooter.constants import (
 from shooter.map import EXIT_TILE, BARRIER_TILE, DOOR_TILE, DOOR_POSITIONS, MAP_W, MAP_H
 from shooter.types import DoorAnimMap, Textures, WallColumn
 import numpy as np
+from numpy.typing import NDArray
 
 
 # ---------------------------------------------------------------------------
@@ -35,60 +36,129 @@ def draw_floor_ceiling(screen: pygame.Surface, px: float, py: float, pa: float,
         pygame.draw.rect(screen, FLOOR, (0, horizon, WIDTH, HEIGHT - horizon))
 
 
+class _FloorCeilingRenderer:
+    """Reuse small row buffers instead of creating full-screen float arrays."""
+
+    # 32 rows keep the working buffers near 2 MiB at the default resolution.
+    _BATCH_ROWS = 32
+
+    def __init__(self, textures: Textures) -> None:
+        self.textures = textures
+        shape = (self._BATCH_ROWS, WIDTH)
+        self.world_x: NDArray[np.float64] = np.empty(shape, dtype=np.float64)
+        self.world_y: NDArray[np.float64] = np.empty(shape, dtype=np.float64)
+        self.scaled: NDArray[np.float64] = np.empty(shape, dtype=np.float64)
+        self.indices: NDArray[np.intp] = np.empty(shape, dtype=np.intp)
+        self.scratch: NDArray[np.intp] = np.empty(shape, dtype=np.intp)
+        self.cells: NDArray[np.intp] = np.empty(shape, dtype=np.intp)
+        self.door_mask: NDArray[np.bool_] = np.empty(shape, dtype=np.bool_)
+        self.samples: NDArray[np.float32] = np.empty((*shape, 3), dtype=np.float32)
+
+        # A single lookup selects floor, ceiling, or the darkened door frame.
+        # Textures are generated once at startup and remain unchanged thereafter.
+        self.atlas: NDArray[np.float32] = np.concatenate((
+            textures['floor_np'].reshape(-1, 3),
+            textures['ceil_np'].reshape(-1, 3),
+            (textures['door_np'] * 0.65).reshape(-1, 3),
+        ))
+        self.rows: NDArray[np.float64] = np.arange(HEIGHT, dtype=np.float64)
+        self.dists: NDArray[np.float64] = np.empty(HEIGHT, dtype=np.float64)
+        self.shades: NDArray[np.float64] = np.empty(HEIGHT, dtype=np.float64)
+        self.horizon: int | None = None
+        self.door_positions: tuple[tuple[int, int], ...] | None = None
+        self.door_grid: NDArray[np.bool_] = np.zeros(MAP_W * MAP_H, dtype=np.bool_)
+
+    def draw(self, screen: pygame.Surface, px: float, py: float, pa: float,
+             horizon: int) -> None:
+        if horizon != self.horizon:
+            np.subtract(self.rows, horizon, out=self.dists)
+            np.abs(self.dists, out=self.dists)
+            # The horizon itself is skipped; avoid dividing by zero there.
+            np.maximum(self.dists, 1, out=self.dists)
+            np.divide(HEIGHT * 0.5, self.dists, out=self.dists)
+            np.multiply(self.dists, 0.07, out=self.shades)
+            np.subtract(1.0, self.shades, out=self.shades)
+            np.clip(self.shades, 0.12, 1.0, out=self.shades)
+            self.horizon = horizon
+
+        # Level generation mutates DOOR_POSITIONS in place, so compare its values.
+        doors = tuple(DOOR_POSITIONS)
+        if doors != self.door_positions:
+            self.door_grid.fill(False)
+            for c, r in doors:
+                self.door_grid[c * MAP_H + r] = True
+            self.door_positions = doors
+
+        angles = np.linspace(pa - HALF_FOV, pa + HALF_FOV, WIDTH, endpoint=False)
+        cos_r = np.cos(angles)
+        sin_r = np.sin(angles)
+        # Row-major traversal matches the surface layout and improves locality.
+        pix = pygame.surfarray.pixels3d(screen).transpose(1, 0, 2)
+        try:
+            for start, end, ceiling in ((0, min(HEIGHT, horizon), True),
+                                        (max(1, horizon + 1), HEIGHT, False)):
+                self._draw_rows(pix, start, end, ceiling, px, py, cos_r, sin_r)
+        finally:
+            del pix
+
+    def _draw_rows(self, pix: NDArray[np.uint8], start: int, end: int,
+                   ceiling: bool, px: float, py: float,
+                   cos_r: NDArray[np.float64], sin_r: NDArray[np.float64]) -> None:
+        for y in range(start, end, self._BATCH_ROWS):
+            stop = min(y + self._BATCH_ROWS, end)
+            count = stop - y
+            wx, wy = self.world_x[:count], self.world_y[:count]
+            scaled = self.scaled[:count]
+            indices, scratch = self.indices[:count], self.scratch[:count]
+            samples = self.samples[:count]
+            np.multiply(self.dists[y:stop, None], cos_r[None, :], out=wx)
+            np.add(wx, px, out=wx)
+            np.multiply(self.dists[y:stop, None], sin_r[None, :], out=wy)
+            np.add(wy, py, out=wy)
+            np.multiply(wx, TEX_SIZE, out=scaled)
+            np.copyto(indices, scaled, casting='unsafe')
+            np.multiply(wy, TEX_SIZE, out=scaled)
+            np.copyto(scratch, scaled, casting='unsafe')
+            # Masking is equivalent to modulo, including negative coordinates,
+            # for power-of-two textures. Retain modulo for other texture sizes.
+            if TEX_SIZE & (TEX_SIZE - 1) == 0:
+                np.bitwise_and(indices, TEX_SIZE - 1, out=indices)
+                np.bitwise_and(scratch, TEX_SIZE - 1, out=scratch)
+            else:
+                np.remainder(indices, TEX_SIZE, out=indices)
+                np.remainder(scratch, TEX_SIZE, out=scratch)
+            np.multiply(indices, TEX_SIZE, out=indices)
+            np.add(indices, scratch, out=indices)
+
+            if ceiling:
+                cells, mask = self.cells[:count], self.door_mask[:count]
+                np.copyto(cells, wx, casting='unsafe')
+                np.clip(cells, 0, MAP_W - 1, out=cells)
+                np.multiply(cells, MAP_H, out=cells)
+                np.copyto(scratch, wy, casting='unsafe')
+                np.clip(scratch, 0, MAP_H - 1, out=scratch)
+                np.add(cells, scratch, out=cells)
+                np.take(self.door_grid, cells, out=mask, mode='clip')
+                np.add(indices, TEX_SIZE ** 2, out=indices)
+                np.add(indices, TEX_SIZE ** 2, out=indices, where=mask)
+
+            # mode='clip' avoids np.take's default temporary output buffer;
+            # indices have already been wrapped into the atlas's valid range.
+            np.take(self.atlas, indices, axis=0, out=samples, mode='clip')
+            np.multiply(samples, self.shades[y:stop, None, None],
+                        out=pix[y:stop], casting='unsafe')
+
+
+_fc_renderer: _FloorCeilingRenderer | None = None
+
+
 def _draw_fc_numpy(screen: pygame.Surface, px: float, py: float, pa: float,
                    horizon: int, tex: Textures) -> None:
-    """Fast floor/ceiling with numpy + surfarray (fully vectorized)."""
-    pix = pygame.surfarray.pixels3d(screen)
-    floor_t = tex['floor_np']
-    ceil_t = tex['ceil_np']
-    door_t = tex['door_np']
-    half_h = HEIGHT * 0.5
-    tm = TEX_SIZE
-
-    angles = np.linspace(pa - HALF_FOV, pa + HALF_FOV, WIDTH, endpoint=False)
-    cos_r = np.cos(angles)
-    sin_r = np.sin(angles)
-
-    # Ceiling mask: True for tiles that hold a door, so we can paint the
-    # door-frame texture on the ceiling directly above each door.
-    door_grid = np.zeros((MAP_W, MAP_H), dtype=bool)
-    for c, r in DOOR_POSITIONS:
-        door_grid[c, r] = True
-
-    y_start = max(1, horizon + 1)
-    if y_start < HEIGHT:
-        rows = np.arange(y_start, HEIGHT)
-        dists = half_h / (rows - horizon)
-        shades = np.clip(1.0 - dists * 0.07, 0.12, 1.0)
-        wx = (px + cos_r[:, np.newaxis] * dists[np.newaxis, :]) * tm
-        wy = (py + sin_r[:, np.newaxis] * dists[np.newaxis, :]) * tm
-        tx = wx.astype(np.int32) % tm
-        ty = wy.astype(np.int32) % tm
-        pix[:, y_start:HEIGHT, :] = (floor_t[tx, ty] * shades[np.newaxis, :, np.newaxis]).astype(np.uint8)
-
-    y_end = min(HEIGHT, horizon)
-    if y_end > 0:
-        rows = np.arange(0, y_end)
-        dists = half_h / (horizon - rows)
-        shades = np.clip(1.0 - dists * 0.07, 0.12, 1.0)
-        world_x = px + cos_r[:, np.newaxis] * dists[np.newaxis, :]
-        world_y = py + sin_r[:, np.newaxis] * dists[np.newaxis, :]
-        wx = world_x * tm
-        wy = world_y * tm
-        tx = wx.astype(np.int32) % tm
-        ty = wy.astype(np.int32) % tm
-        tile_c = np.clip(world_x.astype(np.int32), 0, MAP_W - 1)
-        tile_r = np.clip(world_y.astype(np.int32), 0, MAP_H - 1)
-        is_door_ceil = door_grid[tile_c, tile_r]
-        # Darken the door texture a bit so it reads as an inset frame.
-        ceil_samples = np.where(
-            is_door_ceil[:, :, np.newaxis],
-            door_t[tx, ty] * 0.65,
-            ceil_t[tx, ty],
-        )
-        pix[:, :y_end, :] = (ceil_samples * shades[np.newaxis, :, np.newaxis]).astype(np.uint8)
-
-    del pix
+    """Render at full resolution with a cache bounded to one texture set."""
+    global _fc_renderer
+    if _fc_renderer is None or _fc_renderer.textures is not tex:
+        _fc_renderer = _FloorCeilingRenderer(tex)
+    _fc_renderer.draw(screen, px, py, pa, horizon)
 
 
 # ---------------------------------------------------------------------------
