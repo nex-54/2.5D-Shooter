@@ -18,7 +18,7 @@ import pygame.freetype
 
 from shooter.types import DoorAnim, DoorAnimMap, Sfx, Textures
 from shooter.constants import (
-    WIDTH, HEIGHT, NUM_RAYS, FPS, SAMPLE_RATE,
+    WIDTH, HEIGHT, FPS, SAMPLE_RATE,
     WHITE, BLACK, RED, YELLOW,
     PLAYER_MAX_HP,
     PLAYER_MOVE_SPEED, PLAYER_ROT_SPEED, PLAYER_SPRINT_MULT, PLAYER_MARGIN,
@@ -38,7 +38,7 @@ from shooter.constants import (
 from shooter import map as gmap
 from shooter.map import (
     MAZE, DOOR_TILE, BARRIER_TILE,
-    tile_at, is_blocked, is_obstacle, find_door_in_front, has_line_of_sight,
+    tile_at, is_blocked, blocks_sight, find_door_in_front, has_line_of_sight,
 )
 from shooter.sound import init_sounds
 from shooter.textures import generate_textures, generate_icon
@@ -48,6 +48,7 @@ from shooter.entities import (
     hitscan, apply_hit,
 )
 from shooter.raycaster import cast_rays
+from shooter.occlusion import DepthBuffer
 from shooter.render_world import draw_floor_ceiling, draw_3d
 from shooter.render_sprites import (
     draw_enemies, draw_billboard, draw_health_packs, draw_weapon_pickups,
@@ -520,7 +521,8 @@ def update_rockets(state: GameState, dt: int,
         ny = rocket.y + math.sin(rocket.angle) * step
 
         detonate = False
-        if is_obstacle(nx, ny):
+        # Rockets fly at eye level, over barriers.
+        if blocks_sight(nx, ny):
             # Stop just outside the wall so the explosion sprite doesn't disappear.
             rocket.x -= math.cos(rocket.angle) * 0.05
             rocket.y -= math.sin(rocket.angle) * 0.05
@@ -617,11 +619,11 @@ def draw_level_banner(screen: pygame.Surface, state: GameState, big_font: Any) -
 
 
 def draw_frame(state: GameState, screen: pygame.Surface, font: Any,
-               textures: Textures, z_buffer: list[float],
+               textures: Textures, z_buffer: DepthBuffer,
                player_moving: bool) -> None:
     """Draw one complete gameplay frame (3D view, sprites, HUD)."""
     h_off = int(state.jump_height * JUMP_HEIGHT_SCALE)
-    walls = cast_rays(state.px, state.py, state.pa)
+    walls = cast_rays(state.px, state.py, state.pa, state.door_anim)
     draw_floor_ceiling(screen, state.px, state.py, state.pa, textures, h_off)
     draw_3d(screen, walls, z_buffer, font, textures, h_off, door_anim=state.door_anim)
     draw_enemies(screen, state.enemies, state.px, state.py, state.pa, z_buffer, h_off)
@@ -670,7 +672,7 @@ def main() -> None:
     state = GameState()
     reset_game(state)
 
-    z_buffer = [0.0] * NUM_RAYS
+    z_buffer = DepthBuffer()
     pressed_scancodes: set[int] = set()
 
     pygame.mouse.set_visible(False)

@@ -15,7 +15,8 @@ from shooter.constants import (
     WHITE, CEIL, FLOOR,
 )
 from shooter.map import EXIT_TILE, BARRIER_TILE, DOOR_TILE, DOOR_POSITIONS, MAP_W, MAP_H
-from shooter.types import DoorAnimMap, Textures, WallColumn
+from shooter.occlusion import DepthBuffer
+from shooter.types import BgHit, DoorAnimMap, Textures, WallColumn
 import numpy as np
 from numpy.typing import NDArray
 
@@ -164,114 +165,93 @@ def _draw_fc_numpy(screen: pygame.Surface, px: float, py: float, pa: float,
 # ---------------------------------------------------------------------------
 # 3D Walls
 # ---------------------------------------------------------------------------
-def draw_3d(screen: pygame.Surface, walls: list[WallColumn], z_buffer: list[float],
+def _draw_wall_slice(screen: pygame.Surface, x: int, width: int,
+                     hit: WallColumn | BgHit, z_buffer: DepthBuffer,
+                     horizon: int, tex: Textures | None,
+                     door_anim: DoorAnimMap | None) -> None:
+    depth, offset, side, hit_tile = hit.depth, hit.offset, hit.side, hit.tile
+    door_progress = 0.0
+    if hit_tile == DOOR_TILE and door_anim is not None:
+        anim = door_anim.get(hit.tile_coords)
+        if anim is not None:
+            door_progress = anim['progress']
+
+    if hit_tile == EXIT_TILE:
+        name = 'exit'
+    elif hit_tile == BARRIER_TILE:
+        name = 'barrier'
+    elif hit_tile == DOOR_TILE:
+        name = 'door'
+    else:
+        name = 'wall'
+    cols = tex[name + '_cols'] if tex else None
+
+    wall_h = min(int(HEIGHT / depth), HEIGHT * 2)
+    shade = max(30, 255 - int(depth * 18))
+    if side == 1:
+        shade = int(shade * 0.7)
+    if hit_tile == BARRIER_TILE:
+        wall_h //= 3
+        y = horizon + wall_h // 3
+    else:
+        y = horizon - wall_h // 2
+
+    # Doors retract into the ceiling, exposing the area below their bottom edge.
+    if door_progress > 0:
+        visible_h = max(0, int((1.0 - door_progress) * wall_h))
+        src_y_offset = wall_h - visible_h
+    else:
+        visible_h = wall_h
+        src_y_offset = 0
+    bottom = y + visible_h
+
+    if hit_tile == BARRIER_TILE or door_progress > 0:
+        z_buffer.block_column(x, width, depth, y, bottom)
+    else:
+        # Full walls also separate the ceiling/floor beyond them. Their columns
+        # stay opaque even when a tall sprite extends past the projected wall.
+        z_buffer.block_column(x, width, depth)
+
+    if cols and wall_h > 0:
+        tx = int(offset * TEX_SIZE) % TEX_SIZE
+        vis_top = max(0, y)
+        vis_bot = min(HEIGHT, bottom)
+        if vis_bot > vis_top:
+            scaled = pygame.transform.scale(cols[tx], (width, wall_h))
+            scaled.fill((shade, shade, shade), special_flags=pygame.BLEND_RGB_MULT)
+            screen.blit(scaled, (x, vis_top),
+                        area=(0, src_y_offset + vis_top - y, width, vis_bot - vis_top))
+    else:
+        color = (shade, shade // 2 + 40, shade // 3 + 20)
+        pygame.draw.rect(screen, color, (x, y, width, max(0, bottom - y)))
+
+
+def draw_3d(screen: pygame.Surface, walls: list[WallColumn], z_buffer: DepthBuffer,
             font: Any, textures: Textures | None,
             horizon_offset: int = 0,
             door_anim: DoorAnimMap | None = None) -> None:
-    """Render textured wall columns from raycast results.
-
-    door_anim: optional dict of (col, row) -> {'progress': 0.0..1.0} for sliding doors.
-    progress=0 is fully closed, progress=1 is fully open (door slid up into ceiling)."""
+    """Render walls and record the depth of their visible vertical spans."""
     horizon = HEIGHT // 2 + horizon_offset
-    tex = textures
-
     col_w = max(WIDTH // NUM_RAYS, 1)
+    z_buffer.clear()
     sign_tiles: dict[int, list[int | None]] = {EXIT_TILE: [None, None]}
-    for i, (depth, offset, side, hit_tile, bg_hit, tile_coords) in enumerate(walls):
-        z_buffer[i] = depth
+    for i, wall in enumerate(walls):
         x = i * col_w
+        # Paint every background obstacle, then the foreground. The same spans
+        # drive sprite clipping, including stacked barriers and animated doors.
+        for hit in reversed(wall.bg_hits):
+            _draw_wall_slice(screen, x, col_w + 1, hit, z_buffer,
+                             horizon, textures, door_anim)
+        _draw_wall_slice(screen, x, col_w + 1, wall, z_buffer,
+                         horizon, textures, door_anim)
 
-        # Doors slide up on open/close — hide the top `progress` fraction of the column.
-        door_progress = 0.0
-        if hit_tile == DOOR_TILE and door_anim is not None:
-            anim = door_anim.get(tile_coords)
-            if anim is not None:
-                door_progress = anim['progress']
+        if wall.tile in sign_tiles:
+            if sign_tiles[wall.tile][0] is None:
+                sign_tiles[wall.tile][0] = x
+            sign_tiles[wall.tile][1] = x + col_w
 
-        if hit_tile == EXIT_TILE:
-            cols = tex['exit_cols'] if tex else None
-        elif hit_tile == BARRIER_TILE:
-            cols = tex['barrier_cols'] if tex else None
-        elif hit_tile == DOOR_TILE:
-            cols = tex['door_cols'] if tex else None
-        else:
-            cols = tex['wall_cols'] if tex else None
-
-        # Draw the wall behind a barrier or an animating door so the top of the
-        # doorway reveals the corridor beyond rather than the "infinite" ceiling.
-        draw_bg = bg_hit is not None and (
-            hit_tile == BARRIER_TILE or (hit_tile == DOOR_TILE and door_progress > 0)
-        )
-        if draw_bg and bg_hit is not None:
-            bg_depth, bg_offset, bg_side, bg_tile = bg_hit
-            bg_wall_h = min(int(HEIGHT / bg_depth), HEIGHT * 2)
-            bg_shade = max(30, 255 - int(bg_depth * 18))
-            if bg_side == 1:
-                bg_shade = int(bg_shade * 0.7)
-            bg_y = horizon - bg_wall_h // 2
-
-            if tex:
-                bg_cols = tex['exit_cols'] if bg_tile == EXIT_TILE else (tex['door_cols'] if bg_tile == DOOR_TILE else tex['wall_cols'])
-                bg_tx = int(bg_offset * TEX_SIZE) % TEX_SIZE
-                vis_top = max(0, bg_y)
-                vis_bot = min(HEIGHT, bg_y + bg_wall_h)
-                vis_h = vis_bot - vis_top
-                if vis_h > 0:
-                    scaled = pygame.transform.scale(bg_cols[bg_tx], (col_w + 1, bg_wall_h))
-                    scaled.fill((bg_shade, bg_shade, bg_shade),
-                                special_flags=pygame.BLEND_RGB_MULT)
-                    screen.blit(scaled, (x, vis_top),
-                                area=(0, vis_top - bg_y, col_w + 1, vis_h))
-            else:
-                bg_color = (bg_shade, bg_shade // 2 + 40, bg_shade // 3 + 20)
-                pygame.draw.rect(screen, bg_color, (x, bg_y, col_w + 1, bg_wall_h))
-
-        wall_h = min(int(HEIGHT / depth), HEIGHT * 2)
-        shade = max(30, 255 - int(depth * 18))
-        if side == 1:
-            shade = int(shade * 0.7)
-
-        if hit_tile == BARRIER_TILE:
-            wall_h = wall_h // 3
-            y = horizon + wall_h // 3
-        else:
-            y = horizon - wall_h // 2
-
-        # Sliding door: the door retracts into the ceiling. Its top stays pinned
-        # to the top of the doorway while the bottom rises, so the visible slice
-        # is the TOP (1 - progress) of the doorway showing the BOTTOM of the door
-        # texture. At progress=1 the door is entirely hidden in the ceiling.
-        if door_progress > 0:
-            visible_h = max(0, int((1.0 - door_progress) * wall_h))
-            src_y_offset = wall_h - visible_h
-        else:
-            visible_h = wall_h
-            src_y_offset = 0
-        anim_bot = y + visible_h
-
-        if cols and wall_h > 0:
-            tx = int(offset * TEX_SIZE) % TEX_SIZE
-            vis_top = max(0, y)
-            vis_bot = min(HEIGHT, anim_bot)
-            vis_h = vis_bot - vis_top
-            if vis_h > 0:
-                scaled = pygame.transform.scale(cols[tx], (col_w + 1, wall_h))
-                scaled.fill((shade, shade, shade),
-                            special_flags=pygame.BLEND_RGB_MULT)
-                screen.blit(scaled, (x, vis_top),
-                            area=(0, src_y_offset + (vis_top - y), col_w + 1, vis_h))
-        else:
-            color = (shade, shade // 2 + 40, shade // 3 + 20)
-            pygame.draw.rect(screen, color, (x, y, col_w + 1, max(0, anim_bot - y)))
-
-        if hit_tile in sign_tiles:
-            if sign_tiles[hit_tile][0] is None:
-                sign_tiles[hit_tile][0] = x
-            sign_tiles[hit_tile][1] = x + col_w
-
-    # draw signs on special tiles
     sign_config = {
-        EXIT_TILE:  ("EXIT",  (20, 80, 20)),
+        EXIT_TILE: ("EXIT", (20, 80, 20)),
     }
     for tile_type, (label, bg_color) in sign_config.items():
         left, right = sign_tiles[tile_type]

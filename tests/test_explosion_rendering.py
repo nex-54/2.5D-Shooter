@@ -7,13 +7,17 @@ from unittest.mock import patch
 
 import pygame
 
-from shooter.constants import EXPLOSION_DURATION, HEIGHT, NUM_RAYS, WIDTH
+from shooter.constants import EXPLOSION_DURATION, HEIGHT, WIDTH
 from shooter.entities import Rocket
+from shooter.occlusion import DepthBuffer
 from shooter.render_sprites import draw_rockets
 
 
 class ExplosionRenderingTests(unittest.TestCase):
     background = (17, 29, 41)
+
+    def setUp(self) -> None:
+        self.depth = DepthBuffer()
 
     def make_screen(self) -> pygame.Surface:
         screen = pygame.Surface((WIDTH, HEIGHT))
@@ -26,7 +30,7 @@ class ExplosionRenderingTests(unittest.TestCase):
         rocket.exploded = True
         rocket.explosion_timer = EXPLOSION_DURATION // 4
         draw_rockets(screen, [rocket], 0.0, 0.0, 0.0,
-                     [float('inf')] * NUM_RAYS, horizon_offset)
+                     self.depth, horizon_offset)
 
     def test_close_explosions_bound_allocations_and_preserve_fade(self) -> None:
         # At this age the core is one-quarter opaque and covers the viewport.

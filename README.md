@@ -75,6 +75,7 @@ shooter/
 ├── textures.py         Procedural texture generation
 ├── entities.py         Enemies, pickups, rockets, hitscan
 ├── raycaster.py        Ray casting engine
+├── occlusion.py        Wall depth buffer and sprite clipping through openings
 ├── render_world.py     Floor, ceiling, and wall rendering
 ├── render_sprites.py   Billboarded sprites and effects
 ├── render_ui.py        Minimap, crosshair, HUD

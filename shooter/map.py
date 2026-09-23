@@ -69,20 +69,15 @@ def is_solid(x: float, y: float) -> bool:
     return t == 1 or t == EXIT_TILE or t == BARRIER_TILE or t == DOOR_TILE
 
 
-def is_full_wall(x: float, y: float) -> bool:
-    """Check if a tile fully blocks rays (not barriers)."""
+def blocks_sight(x: float, y: float) -> bool:
+    """Check if a tile blocks sight and projectiles (walls and closed doors).
+    Barriers sit below eye level, so shots, rockets, and enemies see over them."""
     t = tile_at(x, y)
-    return t == 1 or t == EXIT_TILE or t == DOOR_TILE
-
-
-def is_wall_past_door(x: float, y: float) -> bool:
-    """Like is_full_wall but passes through doors — finds the wall beyond an opening door."""
-    t = tile_at(x, y)
-    return t == 1 or t == EXIT_TILE
+    return t == 1 or t == DOOR_TILE
 
 
 def has_line_of_sight(x1: float, y1: float, x2: float, y2: float) -> bool:
-    """Check if there's a clear line between two points (no walls or barriers)."""
+    """Check if there's a clear line between two points (no walls or closed doors)."""
     dx = x2 - x1
     dy = y2 - y1
     dist = math.hypot(dx, dy)
@@ -93,7 +88,7 @@ def has_line_of_sight(x1: float, y1: float, x2: float, y2: float) -> bool:
         t = i / steps
         cx = x1 + dx * t
         cy = y1 + dy * t
-        if is_obstacle(cx, cy):
+        if blocks_sight(cx, cy):
             return False
     return True
 
