@@ -77,17 +77,37 @@ def blocks_sight(x: float, y: float) -> bool:
 
 
 def has_line_of_sight(x1: float, y1: float, x2: float, y2: float) -> bool:
-    """Check if there's a clear line between two points (no walls or closed doors)."""
+    """Traverse every crossed tile, treating walls and closed doors as opaque.
+
+    At grid corners, check both neighboring tiles so sight cannot pass through
+    a diagonal wall seam. Barriers remain transparent at eye level.
+    """
+    cx, cy = math.floor(x1), math.floor(y1)
+    end_x, end_y = math.floor(x2), math.floor(y2)
+    if blocks_sight(cx, cy) or blocks_sight(end_x, end_y):
+        return False
+
     dx = x2 - x1
     dy = y2 - y1
-    dist = math.hypot(dx, dy)
-    if dist < 0.01:
-        return True
-    steps = int(dist * 4)  # check every ~0.25 units
-    for i in range(1, steps + 1):
-        t = i / steps
-        cx = x1 + dx * t
-        cy = y1 + dy * t
+    step_x = 1 if dx > 0 else -1
+    step_y = 1 if dy > 0 else -1
+    while cx != end_x or cy != end_y:
+        # Parametric distances to the next grid boundaries. Stop stepping each
+        # axis once its destination cell is reached, including boundary endpoints.
+        next_x = ((cx + (1 if dx > 0 else 0) - x1) / dx
+                  if cx != end_x else math.inf)
+        next_y = ((cy + (1 if dy > 0 else 0) - y1) / dy
+                  if cy != end_y else math.inf)
+
+        if math.isclose(next_x, next_y, rel_tol=1e-12, abs_tol=1e-12):
+            if blocks_sight(cx + step_x, cy) or blocks_sight(cx, cy + step_y):
+                return False
+            cx += step_x
+            cy += step_y
+        elif next_x < next_y:
+            cx += step_x
+        else:
+            cy += step_y
         if blocks_sight(cx, cy):
             return False
     return True
