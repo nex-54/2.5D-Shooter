@@ -8,15 +8,57 @@ against the wall depth buffer, and paint the sprite as pygame primitives.
 from __future__ import annotations
 
 import math
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 
 import pygame
+from shooter.entities import Enemy, HealthPack, Rocket, WeaponPickup
 from shooter.occlusion import DepthBuffer
 from shooter.constants import (
     WIDTH, HEIGHT, FOV, HALF_FOV, MAX_DEPTH,
     WHITE, normalize_angle,
     EXPLOSION_DURATION,
 )
+
+
+class Billboard(NamedTuple):
+    """A world label that participates in sprite depth ordering."""
+
+    label: str
+    x: float
+    y: float
+    bg_color: tuple[int, int, int]
+
+
+def draw_world_sprites(screen: pygame.Surface, px: float, py: float, pa: float,
+                       z_buffer: DepthBuffer, font: Any, *,
+                       enemies: Sequence[Enemy] = (),
+                       health_packs: Sequence[HealthPack] = (),
+                       weapon_pickups: Sequence[WeaponPickup] = (),
+                       rockets: Sequence[Rocket] = (),
+                       billboards: Sequence[Billboard] = (),
+                       horizon_offset: int = 0) -> None:
+    """Draw all world sprites back to front, sharing the wall clipping buffer."""
+    sprites: list[Enemy | HealthPack | WeaponPickup | Rocket | Billboard] = [
+        *enemies, *health_packs, *weapon_pickups, *rockets, *billboards,
+    ]
+    cos_a, sin_a = math.cos(pa), math.sin(pa)
+    # Camera depth matches the projection and wall buffer, unlike radial distance.
+    # Stable ties leave labels over their own enemies at the same world position.
+    sprites.sort(key=lambda sprite: (sprite.x - px) * cos_a + (sprite.y - py) * sin_a,
+                 reverse=True)
+    for sprite in sprites:
+        if isinstance(sprite, Enemy):
+            draw_enemies(screen, [sprite], px, py, pa, z_buffer, horizon_offset)
+        elif isinstance(sprite, HealthPack):
+            draw_health_packs(screen, [sprite], px, py, pa, z_buffer, horizon_offset)
+        elif isinstance(sprite, WeaponPickup):
+            draw_weapon_pickups(screen, [sprite], px, py, pa, z_buffer, horizon_offset)
+        elif isinstance(sprite, Rocket):
+            draw_rockets(screen, [sprite], px, py, pa, z_buffer, horizon_offset)
+        else:
+            draw_billboard(screen, font, sprite.label, sprite.x, sprite.y,
+                           px, py, pa, z_buffer, sprite.bg_color, horizon_offset)
 
 
 # ---------------------------------------------------------------------------

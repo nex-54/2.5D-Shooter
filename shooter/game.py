@@ -50,10 +50,7 @@ from shooter.entities import (
 from shooter.raycaster import cast_rays
 from shooter.occlusion import DepthBuffer
 from shooter.render_world import draw_floor_ceiling, draw_3d
-from shooter.render_sprites import (
-    draw_enemies, draw_billboard, draw_health_packs, draw_weapon_pickups,
-    draw_rockets,
-)
+from shooter.render_sprites import Billboard, draw_world_sprites
 from shooter.render_ui import draw_minimap, draw_crosshair, draw_hud
 from shooter.weapons import draw_weapon
 
@@ -626,15 +623,13 @@ def draw_frame(state: GameState, screen: pygame.Surface, font: Any,
     walls = cast_rays(state.px, state.py, state.pa, state.door_anim)
     draw_floor_ceiling(screen, state.px, state.py, state.pa, textures, h_off)
     draw_3d(screen, walls, z_buffer, font, textures, h_off, door_anim=state.door_anim)
-    draw_enemies(screen, state.enemies, state.px, state.py, state.pa, z_buffer, h_off)
-    draw_health_packs(screen, state.health_packs, state.px, state.py, state.pa, z_buffer, h_off)
-    draw_weapon_pickups(screen, state.weapon_pickups, state.px, state.py, state.pa, z_buffer, h_off)
-    draw_rockets(screen, state.rockets, state.px, state.py, state.pa, z_buffer, h_off)
-    draw_billboard(screen, font, "START", gmap.PLAYER_SPAWN[0], gmap.PLAYER_SPAWN[1],
-                   state.px, state.py, state.pa, z_buffer, (20, 20, 80), h_off)
+    billboards = [Billboard("START", *gmap.PLAYER_SPAWN, (20, 20, 80))]
     if state.boss is not None and state.boss.alive:
-        draw_billboard(screen, font, "BOSS", state.boss.x, state.boss.y,
-                       state.px, state.py, state.pa, z_buffer, (80, 20, 80), h_off)
+        billboards.append(Billboard("BOSS", state.boss.x, state.boss.y, (80, 20, 80)))
+    draw_world_sprites(screen, state.px, state.py, state.pa, z_buffer, font,
+                       enemies=state.enemies, health_packs=state.health_packs,
+                       weapon_pickups=state.weapon_pickups, rockets=state.rockets,
+                       billboards=billboards, horizon_offset=h_off)
     draw_minimap(screen, state.px, state.py, state.pa, state.enemies,
                  state.health_packs, state.weapon_pickups, state.rockets)
     draw_crosshair(screen)
