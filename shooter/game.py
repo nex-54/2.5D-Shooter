@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 import random
 import sys
+from collections.abc import Callable
 from typing import Any
 
 import pygame
@@ -18,16 +19,16 @@ import pygame.freetype
 
 from shooter.types import DoorAnim, DoorAnimMap, Sfx, Textures
 from shooter.constants import (
-    WIDTH, HEIGHT, FPS, SAMPLE_RATE,
+    WIDTH, HEIGHT, FPS, SAMPLE_RATE, EYE_HEIGHT,
     WHITE, BLACK, RED, YELLOW,
     PLAYER_MAX_HP,
     PLAYER_MOVE_SPEED, PLAYER_ROT_SPEED, PLAYER_SPRINT_MULT, PLAYER_MARGIN,
     MOUSE_SENSITIVITY,
-    JUMP_VELOCITY, GRAVITY, JUMP_HEIGHT_SCALE,
+    JUMP_VELOCITY, GRAVITY,
     INITIAL_AMMO, INITIAL_OWNED, MAX_AMMO, AMMO_INDEX, FIRE_RATES, WEAPON_NAMES, EMPTY_CLICK_DELAY,
     DAMAGE_COOLDOWN_MS, PICKUP_RADIUS,
     PISTOL_DAMAGE,
-    SHOTGUN_PELLETS, SHOTGUN_SPREAD, SHOTGUN_RANGE, SHOTGUN_THRESHOLD,
+    SHOTGUN_PELLETS, SHOTGUN_SPREAD, SHOTGUN_RANGE,
     GATLING_SPREAD,
     ROCKET_SPEED, ROCKET_HIT_RADIUS, ROCKET_BLAST_RADIUS, ROCKET_MAX_HITS,
     ROCKET_SELF_DAMAGE, EXPLOSION_DURATION,
@@ -87,7 +88,8 @@ class GameState:
             shooting     -- True while the firing animation is playing.
             shoot_timer  -- ms until the next shot is allowed (ROF gate).
             mouse_held   -- True while LMB is down (drives gatling auto-fire).
-            gatling_spin -- barrel rotation angle, spins up/down smoothly.
+            gatling_spin -- barrel rotation angle (radians).
+            gatling_speed-- barrel speed (rad/ms); coasts down after release.
 
         Footsteps
             step_timer, step_index -- alternates step0/step1 sounds on move.
@@ -95,6 +97,7 @@ class GameState:
         World
             game_time  -- seconds elapsed; used for idle-sway animations.
             game_over  -- True after death; main loop skips updates.
+            paused     -- True while the pause screen is up; main loop skips updates.
             door_anim  -- per-door animation state; see shooter.types.DoorAnim.
 
         Level progression
@@ -136,6 +139,7 @@ class GameState:
         self.shoot_timer = 0
         self.mouse_held = False
         self.gatling_spin = 0.0
+        self.gatling_speed = 0.0
 
         # Footsteps
         self.step_timer = 0
@@ -144,6 +148,7 @@ class GameState:
         # World
         self.game_time = 0.0
         self.game_over = False
+        self.paused = False
         self.door_anim: DoorAnimMap = {}
 
         # Level progression
@@ -158,6 +163,11 @@ class GameState:
         self.health_packs: list[HealthPack] = []
         self.weapon_pickups: list[WeaponPickup] = []
         self.rockets: list[Rocket] = []
+
+    @property
+    def exit_open(self) -> bool:
+        """The exit unlocks once the level boss is dead."""
+        return self.boss is not None and not self.boss.alive
 
 
 def start_level(state: GameState, level: int) -> None:
@@ -225,7 +235,18 @@ def handle_events(state: GameState, sfx: Sfx,
         elif event.type == pygame.KEYDOWN:
             pressed_scancodes.add(event.scancode)
             if event.key == pygame.K_ESCAPE:
-                return False
+                # Esc pauses; the game-over screen has nothing to pause.
+                if state.game_over:
+                    return False
+                if state.paused:
+                    state.paused = False
+                else:
+                    _pause(state, pressed_scancodes)
+                continue
+            if state.paused:
+                if event.key == pygame.K_q:
+                    return False
+                continue
             if event.scancode == pygame.KSCAN_R and state.game_over:
                 reset_game(state)
             # Reset the fire cooldown only on an actual switch — re-pressing the
@@ -247,17 +268,29 @@ def handle_events(state: GameState, sfx: Sfx,
                     sfx['door_open'].play()
         elif event.type == pygame.KEYUP:
             pressed_scancodes.discard(event.scancode)
-        elif event.type == pygame.MOUSEMOTION:
+        elif event.type == pygame.WINDOWFOCUSLOST:
             if not state.game_over:
+                _pause(state, pressed_scancodes)
+        elif event.type == pygame.MOUSEMOTION:
+            if not state.game_over and not state.paused:
                 state.pa += event.rel[0] * MOUSE_SENSITIVITY
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and not state.game_over:
+            if event.button == 1 and state.paused:
+                state.paused = False  # the click that resumes doesn't fire
+            elif event.button == 1 and not state.game_over:
                 state.mouse_held = True
                 _handle_click_fire(state, sfx)
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 state.mouse_held = False
     return True
+
+
+def _pause(state: GameState, pressed_scancodes: set[int]) -> None:
+    """Freeze gameplay, dropping held input so nothing sticks on resume."""
+    state.paused = True
+    state.mouse_held = False
+    pressed_scancodes.clear()
 
 
 def _handle_click_fire(state: GameState, sfx: Sfx) -> None:
@@ -285,8 +318,7 @@ def _handle_click_fire(state: GameState, sfx: Sfx) -> None:
         for _ in range(SHOTGUN_PELLETS):
             spread = random.uniform(-SHOTGUN_SPREAD, SHOTGUN_SPREAD)
             target = hitscan(state.enemies, state.px, state.py, state.pa,
-                             spread=spread, max_range=SHOTGUN_RANGE,
-                             threshold=SHOTGUN_THRESHOLD)
+                             spread=spread, max_range=SHOTGUN_RANGE)
             if target and apply_hit(target, sfx):
                 state.kills += 1
     if state.weapon == 3 and state.ammo[AMMO_INDEX[3]] > 0 and state.shoot_timer <= 0:
@@ -318,6 +350,28 @@ def _handle_click_fire(state: GameState, sfx: Sfx) -> None:
 # ---------------------------------------------------------------------------
 # Per-frame updates
 # ---------------------------------------------------------------------------
+def _footprint_hits(x: float, y: float, solid: Callable[[float, float], bool]) -> bool:
+    """Check the player's square footprint (half-width PLAYER_MARGIN) at (x, y).
+
+    The footprint is narrower than a tile, so its corners touch every tile it overlaps.
+    """
+    r = PLAYER_MARGIN
+    return any(solid(cx, cy) for cx in (x - r, x + r) for cy in (y - r, y + r))
+
+
+def _advance(pos: float, delta: float, blocked: Callable[[float], bool]) -> float:
+    """Move along one axis, or stop flush against the tile edge in the way."""
+    if not blocked(pos + delta):
+        return pos + delta
+    if delta > 0:
+        edge = math.floor(pos + delta + PLAYER_MARGIN) - PLAYER_MARGIN - 1e-6
+    else:
+        edge = math.floor(pos + delta - PLAYER_MARGIN) + 1 + PLAYER_MARGIN + 1e-6
+    if (edge - pos) * delta > 0 and not blocked(edge):
+        return edge
+    return pos
+
+
 def update_player(state: GameState, dt: int, keys: Any,
                   pressed_scancodes: set[int],
                   sfx: Sfx) -> bool:
@@ -349,12 +403,18 @@ def update_player(state: GameState, dt: int, keys: Any,
         dy = dy / move_len * sp
 
     old_px, old_py = state.px, state.py
-    if (dx != 0 or dy != 0) and sp > 0:
-        jh = 1.0 if tile_at(state.px, state.py) == BARRIER_TILE and state.jump_height < 0.3 else state.jump_height
-        if dx != 0 and not is_blocked(state.px + dx * (1 + PLAYER_MARGIN / sp), state.py, jh):
-            state.px += dx
-        if dy != 0 and not is_blocked(state.px, state.py + dy * (1 + PLAYER_MARGIN / sp), jh):
-            state.py += dy
+    if dx != 0 or dy != 0:
+        # Landing on a barrier's edge leaves the player standing on it, free to step off.
+        on_barrier = state.jump_height < 0.3 and _footprint_hits(
+            state.px, state.py, lambda x, y: tile_at(x, y) == BARRIER_TILE)
+        jh = 1.0 if on_barrier else state.jump_height
+        exit_open = state.exit_open
+
+        def solid(x: float, y: float) -> bool:
+            return is_blocked(x, y, jh, exit_open)
+
+        state.px = _advance(state.px, dx, lambda x: _footprint_hits(x, state.py, solid))
+        state.py = _advance(state.py, dy, lambda y: _footprint_hits(state.px, y, solid))
 
     if keys[pygame.K_SPACE] and state.on_ground:
         state.jump_vel = JUMP_VELOCITY
@@ -387,7 +447,7 @@ def update_combat(state: GameState, dt: int,
         state.shooting = False
 
     if state.weapon == 2 and state.mouse_held and not state.game_over:
-        state.gatling_spin = (state.gatling_spin + dt * 0.08) % (2 * math.pi)
+        state.gatling_speed = 0.08
         if state.shoot_timer <= 0 and state.ammo[AMMO_INDEX[2]] > 0:
             state.shooting = True
             state.shoot_timer = FIRE_RATES[2]
@@ -400,8 +460,10 @@ def update_combat(state: GameState, dt: int,
         elif state.shoot_timer <= 0 and state.ammo[AMMO_INDEX[2]] <= 0:
             sfx['empty'].play()
             state.shoot_timer = EMPTY_CLICK_DELAY
-    if state.gatling_spin > 0 and not (state.weapon == 2 and state.mouse_held and not state.game_over):
-        state.gatling_spin = max(0, state.gatling_spin - dt * 0.02)
+    else:
+        # Released barrels coast to a stop over 400 ms instead of unwinding.
+        state.gatling_speed = max(0.0, state.gatling_speed - dt * 0.0002)
+    state.gatling_spin = (state.gatling_spin + state.gatling_speed * dt) % (2 * math.pi)
 
 
 def update_doors(state: GameState, dt: int,
@@ -421,7 +483,9 @@ def update_doors(state: GameState, dt: int,
         elif phase == 'open':
             anim['timer'] -= dt
             if anim['timer'] <= 0:
-                occupied = (int(state.px) == dc and int(state.py) == dr)
+                # Any overlap with the player's footprint keeps the door open.
+                occupied = _footprint_hits(state.px, state.py,
+                                           lambda x, y: (int(x), int(y)) == (dc, dr))
                 if not occupied:
                     for e in state.enemies:
                         if e.alive and int(e.x) == dc and int(e.y) == dr:
@@ -578,7 +642,7 @@ def check_win_lose(state: GameState) -> None:
     if state.hp <= 0:
         state.game_over = True
         return
-    if int(state.px) == gmap.EXIT_X and int(state.py) == gmap.EXIT_Y and state.boss is not None and not state.boss.alive:
+    if int(state.px) == gmap.EXIT_X and int(state.py) == gmap.EXIT_Y and state.exit_open:
         # Advance to the next randomly-generated level. Ammo and weapons carry
         # over; HP refills (see start_level).
         start_level(state, state.level + 1)
@@ -615,21 +679,32 @@ def draw_level_banner(screen: pygame.Surface, state: GameState, big_font: Any) -
     screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, HEIGHT // 2 - msg.get_height() // 2))
 
 
+def draw_pause_overlay(screen: pygame.Surface, font: Any, big_font: Any) -> None:
+    """Dim the frozen frame and show how to resume or quit."""
+    dim = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    dim.fill((0, 0, 0, 150))
+    screen.blit(dim, (0, 0))
+    msg, _ = big_font.render("PAUSED", YELLOW)
+    screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, HEIGHT // 2 - 40))
+    sub, _ = font.render("Esc or click to resume  -  Q to quit", WHITE)
+    screen.blit(sub, (WIDTH // 2 - sub.get_width() // 2, HEIGHT // 2 + 30))
+
+
 def draw_frame(state: GameState, screen: pygame.Surface, font: Any,
                textures: Textures, z_buffer: DepthBuffer,
                player_moving: bool) -> None:
     """Draw one complete gameplay frame (3D view, sprites, HUD)."""
-    h_off = int(state.jump_height * JUMP_HEIGHT_SCALE)
+    eye = EYE_HEIGHT + state.jump_height
     walls = cast_rays(state.px, state.py, state.pa, state.door_anim)
-    draw_floor_ceiling(screen, state.px, state.py, state.pa, textures, h_off)
-    draw_3d(screen, walls, z_buffer, font, textures, h_off, door_anim=state.door_anim)
+    draw_floor_ceiling(screen, state.px, state.py, state.pa, textures, eye)
+    draw_3d(screen, walls, z_buffer, font, textures, eye, door_anim=state.door_anim)
     billboards = [Billboard("START", *gmap.PLAYER_SPAWN, (20, 20, 80))]
     if state.boss is not None and state.boss.alive:
         billboards.append(Billboard("BOSS", state.boss.x, state.boss.y, (80, 20, 80)))
     draw_world_sprites(screen, state.px, state.py, state.pa, z_buffer, font,
                        enemies=state.enemies, health_packs=state.health_packs,
                        weapon_pickups=state.weapon_pickups, rockets=state.rockets,
-                       billboards=billboards, horizon_offset=h_off)
+                       billboards=billboards, eye_height=eye)
     draw_minimap(screen, state.px, state.py, state.pa, state.enemies,
                  state.health_packs, state.weapon_pickups, state.rockets)
     draw_crosshair(screen)
@@ -670,10 +745,10 @@ def main() -> None:
     z_buffer = DepthBuffer()
     pressed_scancodes: set[int] = set()
 
-    pygame.mouse.set_visible(False)
-    pygame.event.set_grab(True)
+    _capture_mouse(True)
 
     running = True
+    paused_frame: pygame.Surface | None = None
     while running:
         dt = min(clock.tick(FPS), 50)
 
@@ -683,6 +758,23 @@ def main() -> None:
             draw_game_over(screen, state, font, big_font)
             pygame.display.flip()
             continue
+
+        if state.paused:
+            # Hold the last frame under the overlay; free the mouse and mute.
+            if paused_frame is None:
+                paused_frame = screen.copy()
+                draw_pause_overlay(paused_frame, font, big_font)
+                _capture_mouse(False)
+                pygame.mixer.pause()
+            screen.blit(paused_frame, (0, 0))
+            pygame.display.flip()
+            continue
+        if paused_frame is not None:
+            paused_frame = None
+            _capture_mouse(True)
+            # Don't turn by however far the free cursor travelled.
+            pygame.event.clear(pygame.MOUSEMOTION)
+            pygame.mixer.unpause()
 
         keys = pygame.key.get_pressed()
         player_moving = update_player(state, dt, keys, pressed_scancodes, sfx)
@@ -700,7 +792,12 @@ def main() -> None:
         draw_level_banner(screen, state, big_font)
         pygame.display.flip()
 
-    pygame.event.set_grab(False)
-    pygame.mouse.set_visible(True)
+    _capture_mouse(False)
     pygame.quit()
     sys.exit()
+
+
+def _capture_mouse(captured: bool) -> None:
+    """Hide and grab the cursor for mouselook, or hand it back."""
+    pygame.mouse.set_visible(not captured)
+    pygame.event.set_grab(captured)

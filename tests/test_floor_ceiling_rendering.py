@@ -8,7 +8,7 @@ import numpy as np
 import pygame
 
 from shooter import map as gmap
-from shooter.constants import HEIGHT, TEX_SIZE, WIDTH
+from shooter.constants import EYE_HEIGHT, HEIGHT, TEX_SIZE, WIDTH
 from shooter.render_world import draw_floor_ceiling
 from shooter.types import Textures
 
@@ -35,25 +35,25 @@ class FloorCeilingRenderingTests(unittest.TestCase):
         points = ((0, 0), (173, 61), (512, 200), (1023, 333),
                   (91, 385), (780, 527), (411, 703), (1023, 767))
         cases = (
-            ((1.5, 1.5, 0.0, 0),
+            ((1.5, 1.5, 0.0, EYE_HEIGHT),
              ((73, 173, 103), (94, 20, 62), (75, 90, 75), (8, 79, 34),
               (13, 5, 9), (43, 50, 54), (141, 71, 99), (107, 35, 70))),
-            ((5.125, 8.375, 1.9, 137),
-             ((48, 46, 48), (29, 54, 41), (99, 97, 90), (50, 160, 86),
-              (56, 77, 61), (12, 5, 8), (121, 73, 92), (148, 89, 110))),
-            ((1.5, 1.5, 3.9, 514),
-             ((16, 79, 43), (20, 64, 40), (25, 29, 31), (46, 143, 80),
-              (101, 52, 76), (125, 109, 107), (116, 55, 84), (65, 48, 56))),
-            ((3.25, 6.75, 6.2, -400),
-             ((1, 2, 3), (20, 63, 50), (20, 92, 69), (87, 60, 76),
-              (46, 54, 59), (195, 134, 150), (160, 107, 125), (158, 150, 145))),
+            ((5.125, 8.375, 1.9, 0.7),
+             ((45, 18, 37), (29, 32, 34), (97, 104, 92), (26, 111, 56),
+              (24, 17, 19), (142, 76, 99), (142, 28, 77), (172, 77, 112))),
+            ((1.5, 1.5, 3.9, 0.9),
+             ((48, 92, 64), (48, 83, 60), (37, 47, 43), (13, 153, 66),
+              (11, 12, 12), (132, 37, 74), (144, 44, 85), (166, 83, 113))),
+            ((3.25, 6.75, 6.2, 0.25),
+             ((90, 137, 99), (121, 168, 125), (47, 80, 57), (3, 13, 8),
+              (8, 17, 13), (124, 27, 71), (174, 105, 128), (161, 150, 146))),
         )
-        # Return to the initial view after changing both angle and horizon.
-        for (px, py, pa, offset), colors in (*cases, cases[0]):
+        # Return to the initial view after changing both angle and eye height.
+        for (px, py, pa, eye), colors in (*cases, cases[0]):
             self.screen.fill((1, 2, 3))
-            draw_floor_ceiling(self.screen, px, py, pa, self.textures, offset)
+            draw_floor_ceiling(self.screen, px, py, pa, self.textures, eye)
             for point, color in zip(points, colors):
-                with self.subTest(pose=(px, py, pa, offset), pixel=point):
+                with self.subTest(pose=(px, py, pa, eye), pixel=point):
                     self.assertEqual(self.screen.get_at(point)[:3], color)
             self.assertFalse(self.screen.get_locked())
 

@@ -17,6 +17,8 @@ EXIT_TILE = 2
 BARRIER_TILE = 4
 DOOR_TILE = 5
 
+BARRIER_HEIGHT = 1 / 3  # in wall heights; jumping 0.3 high clears a barrier
+
 # ---------------------------------------------------------------------------
 # Map dimensions (constant across levels)
 # ---------------------------------------------------------------------------
@@ -47,10 +49,14 @@ def tile_at(x: float, y: float) -> int:
     return 1
 
 
-def is_blocked(x: float, y: float, jump_h: float) -> bool:
-    """Check if position is blocked considering jump height."""
+def is_blocked(x: float, y: float, jump_h: float, exit_open: bool = False) -> bool:
+    """Check if position is blocked considering jump height.
+
+    The exit is a closed door until exit_open is set (the level boss is dead)."""
     t = tile_at(x, y)
     if t == 1 or t == DOOR_TILE:
+        return True
+    if t == EXIT_TILE and not exit_open:
         return True
     if t == BARRIER_TILE and jump_h < 0.3:
         return True

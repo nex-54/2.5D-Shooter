@@ -13,6 +13,8 @@ HALF_FOV = FOV / 2
 NUM_RAYS = WIDTH
 MAX_DEPTH = 20
 FPS = 60
+# Heights are in wall heights: the floor is at 0 and the ceiling at 1.
+EYE_HEIGHT = 0.5            # camera height while standing
 
 # ---------------------------------------------------------------------------
 # Minimap
@@ -62,9 +64,9 @@ MOUSE_SENSITIVITY = 0.003
 # ---------------------------------------------------------------------------
 # Physics
 # ---------------------------------------------------------------------------
-JUMP_VELOCITY = 0.012
-GRAVITY = 0.00004
-JUMP_HEIGHT_SCALE = 300
+# Peaks near 0.4 wall heights after 300 ms: over barriers, under the ceiling.
+JUMP_VELOCITY = 0.0027
+GRAVITY = 0.000009
 
 # ---------------------------------------------------------------------------
 # Weapons  (indices: 0=pistol, 1=shotgun, 2=gatling, 3=rocket launcher, 4=nuke)
@@ -85,9 +87,8 @@ DAMAGE_COOLDOWN_MS = 500
 PICKUP_RADIUS = 0.6
 PISTOL_DAMAGE = 2                  # take_damage() calls per pistol shot
 SHOTGUN_PELLETS = 8
-SHOTGUN_SPREAD = 0.25
+SHOTGUN_SPREAD = 0.1               # max pellet angle off the crosshair (radians)
 SHOTGUN_RANGE = 6
-SHOTGUN_THRESHOLD = 0.2
 GATLING_SPREAD = 0.08
 ROCKET_SPEED = 0.008               # world units per ms
 ROCKET_HIT_RADIUS = 0.6            # direct-hit proximity to enemies

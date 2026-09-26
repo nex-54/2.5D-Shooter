@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pygame
 
-from shooter.constants import EXPLOSION_DURATION, HEIGHT, WIDTH
+from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH
 from shooter.entities import Rocket
 from shooter.occlusion import DepthBuffer
 from shooter.render_sprites import draw_rockets
@@ -25,12 +25,13 @@ class ExplosionRenderingTests(unittest.TestCase):
         return screen
 
     def draw_explosion(self, screen: pygame.Surface, distance: float = 4.0,
-                       horizon_offset: int = 0) -> None:
+                       shift: int = 0) -> None:
         rocket = Rocket(distance, 0.0, 0.0)
         rocket.exploded = True
         rocket.explosion_timer = EXPLOSION_DURATION // 4
+        # Raising the eye by shift * depth / HEIGHT lowers the sprite by shift pixels.
         draw_rockets(screen, [rocket], 0.0, 0.0, 0.0,
-                     self.depth, horizon_offset)
+                     self.depth, EYE_HEIGHT + shift * distance / HEIGHT)
 
     def test_close_explosions_bound_allocations_and_preserve_fade(self) -> None:
         # At this age the core is one-quarter opaque and covers the viewport.
@@ -61,12 +62,12 @@ class ExplosionRenderingTests(unittest.TestCase):
         reference = self.make_screen()
         self.draw_explosion(reference)
 
-        for offset in (-HEIGHT // 2 - 32, HEIGHT // 2 + 32):
-            with self.subTest(horizon_offset=offset):
+        for shift in (-HEIGHT // 2 - 48, HEIGHT // 2 + 48):
+            with self.subTest(shift=shift):
                 expected = self.make_screen()
-                expected.blit(reference, (0, offset))
+                expected.blit(reference, (0, shift))
                 actual = self.make_screen()
-                self.draw_explosion(actual, horizon_offset=offset)
+                self.draw_explosion(actual, shift=shift)
                 self.assertEqual(pygame.image.tobytes(actual, 'RGB'),
                                  pygame.image.tobytes(expected, 'RGB'))
 
@@ -92,7 +93,7 @@ class ExplosionRenderingTests(unittest.TestCase):
         screen = self.make_screen()
         before = pygame.image.tobytes(screen, 'RGB')
         with patch('shooter.render_sprites.pygame.Surface') as allocate:
-            self.draw_explosion(screen, horizon_offset=HEIGHT * 2)
+            self.draw_explosion(screen, shift=HEIGHT * 2)
         allocate.assert_not_called()
         self.assertEqual(pygame.image.tobytes(screen, 'RGB'), before)
 

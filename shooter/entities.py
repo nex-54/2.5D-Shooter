@@ -9,7 +9,7 @@ import math
 import random
 from shooter.types import Sfx
 from shooter.constants import (
-    MAX_DEPTH, normalize_angle,
+    MAX_DEPTH,
     BOSS_START_X, BOSS_START_Y,
     SPAWN_REGULAR_COUNT, SPAWN_SCOUT_COUNT, SPAWN_SPIDER_COUNT,
     SPAWN_HEALTH_PACK_COUNT, SPAWN_WEAPON_PICKUP_COUNT,
@@ -29,9 +29,14 @@ def _blocks_enemy(x: float, y: float) -> bool:
 # Combat helpers
 # ---------------------------------------------------------------------------
 def hitscan(enemies: list[Enemy], px: float, py: float, pa: float,
-            spread: float = 0, max_range: float = MAX_DEPTH,
-            threshold: float = 0.15) -> Enemy | None:
-    """Find the closest enemy in the crosshair direction (+spread). Returns enemy or None."""
+            spread: float = 0, max_range: float = MAX_DEPTH) -> Enemy | None:
+    """Find the first enemy the shot ray (crosshair direction + spread) enters.
+
+    Enemies are circles of hit_radius, so the target zone shrinks with distance
+    like the sprite does. The ray must reach the body unobstructed, which lets
+    shots hit the part of an enemy that shows past a wall corner.
+    """
+    cos_a, sin_a = math.cos(pa + spread), math.sin(pa + spread)
     best_enemy = None
     best_dist = max_range
     for e in enemies:
@@ -39,12 +44,15 @@ def hitscan(enemies: list[Enemy], px: float, py: float, pa: float,
             continue
         edx = e.x - px
         edy = e.y - py
-        dist = math.hypot(edx, edy)
-        if dist >= best_dist:
+        along = edx * cos_a + edy * sin_a
+        across = abs(edy * cos_a - edx * sin_a)
+        if across >= e.hit_radius:
             continue
-        angle = math.atan2(edy, edx)
-        diff = normalize_angle(angle - pa - spread)
-        if abs(diff) < threshold and has_line_of_sight(px, py, e.x, e.y):
+        half_chord = math.sqrt(e.hit_radius ** 2 - across ** 2)
+        if along + half_chord <= 0:
+            continue  # behind the shooter
+        dist = max(0.0, along - half_chord)
+        if dist < best_dist and has_line_of_sight(px, py, px + cos_a * dist, py + sin_a * dist):
             best_enemy = e
             best_dist = dist
     return best_enemy
@@ -95,6 +103,9 @@ class Enemy:
         self.always_alert = False
         self.damage = 10
         self.attack_cooldown_duration = 1000
+        # Half the drawn body width (torso to arms) in world units, for hitscan.
+        # Keep in step with the sprite scales in render_sprites.draw_enemies.
+        self.hit_radius = 0.25
 
     def update(self, px: float, py: float, dt: int) -> None:
         if not self.alive:
@@ -186,6 +197,7 @@ class Boss(Enemy):
         self.wander_timer_range = (1500, 3500)
         self.damage = 15
         self.attack_cooldown_duration = 1200
+        self.hit_radius = 0.38
 
 
 class Scout(Enemy):
@@ -205,6 +217,7 @@ class Scout(Enemy):
         self.wall_wander_timer_range = (300, 1000)
         self.damage = 5
         self.attack_cooldown_duration = 600
+        self.hit_radius = 0.18
 
 
 class Spider(Enemy):
@@ -224,6 +237,7 @@ class Spider(Enemy):
         self.wall_wander_timer_range = (200, 800)
         self.damage = 8
         self.attack_cooldown_duration = 700
+        self.hit_radius = 0.18
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ import pygame
 from shooter.entities import Enemy, HealthPack, Rocket, WeaponPickup
 from shooter.occlusion import DepthBuffer
 from shooter.constants import (
-    WIDTH, HEIGHT, FOV, HALF_FOV, MAX_DEPTH,
+    WIDTH, HEIGHT, FOV, HALF_FOV, MAX_DEPTH, EYE_HEIGHT,
     WHITE, normalize_angle,
     EXPLOSION_DURATION,
 )
@@ -30,6 +30,13 @@ class Billboard(NamedTuple):
     bg_color: tuple[int, int, int]
 
 
+def _eye_row(depth: float, eye_height: float) -> int:
+    """Screen row of standing eye height, where sprites are anchored, at a depth.
+
+    Raising the eye lowers nearby objects more than distant ones."""
+    return HEIGHT // 2 + int((eye_height - EYE_HEIGHT) * HEIGHT / depth)
+
+
 def draw_world_sprites(screen: pygame.Surface, px: float, py: float, pa: float,
                        z_buffer: DepthBuffer, font: Any, *,
                        enemies: Sequence[Enemy] = (),
@@ -37,7 +44,7 @@ def draw_world_sprites(screen: pygame.Surface, px: float, py: float, pa: float,
                        weapon_pickups: Sequence[WeaponPickup] = (),
                        rockets: Sequence[Rocket] = (),
                        billboards: Sequence[Billboard] = (),
-                       horizon_offset: int = 0) -> None:
+                       eye_height: float = EYE_HEIGHT) -> None:
     """Draw all world sprites back to front, sharing the wall clipping buffer."""
     sprites: list[Enemy | HealthPack | WeaponPickup | Rocket | Billboard] = [
         *enemies, *health_packs, *weapon_pickups, *rockets, *billboards,
@@ -49,16 +56,16 @@ def draw_world_sprites(screen: pygame.Surface, px: float, py: float, pa: float,
                  reverse=True)
     for sprite in sprites:
         if isinstance(sprite, Enemy):
-            draw_enemies(screen, [sprite], px, py, pa, z_buffer, horizon_offset)
+            draw_enemies(screen, [sprite], px, py, pa, z_buffer, eye_height)
         elif isinstance(sprite, HealthPack):
-            draw_health_packs(screen, [sprite], px, py, pa, z_buffer, horizon_offset)
+            draw_health_packs(screen, [sprite], px, py, pa, z_buffer, eye_height)
         elif isinstance(sprite, WeaponPickup):
-            draw_weapon_pickups(screen, [sprite], px, py, pa, z_buffer, horizon_offset)
+            draw_weapon_pickups(screen, [sprite], px, py, pa, z_buffer, eye_height)
         elif isinstance(sprite, Rocket):
-            draw_rockets(screen, [sprite], px, py, pa, z_buffer, horizon_offset)
+            draw_rockets(screen, [sprite], px, py, pa, z_buffer, eye_height)
         else:
             draw_billboard(screen, font, sprite.label, sprite.x, sprite.y,
-                           px, py, pa, z_buffer, sprite.bg_color, horizon_offset)
+                           px, py, pa, z_buffer, sprite.bg_color, eye_height)
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +73,7 @@ def draw_world_sprites(screen: pygame.Surface, px: float, py: float, pa: float,
 # ---------------------------------------------------------------------------
 def draw_enemies(screen: pygame.Surface, enemies: list[Any],
                  px: float, py: float, pa: float,
-                 z_buffer: DepthBuffer, horizon_offset: int = 0) -> None:
+                 z_buffer: DepthBuffer, eye_height: float = EYE_HEIGHT) -> None:
     """Sort and draw enemies, clipping only pixels covered by nearer geometry."""
     visible = []
     for e in enemies:
@@ -93,7 +100,7 @@ def draw_enemies(screen: pygame.Surface, enemies: list[Any],
         sprite_h = min(int(HEIGHT / corrected * scale), HEIGHT * 2)
         sprite_w = max(sprite_h // 2, 4)
         screen_x = int((diff / FOV + 0.5) * WIDTH)
-        screen_y = HEIGHT // 2 + horizon_offset - sprite_h // 2
+        screen_y = _eye_row(corrected, eye_height) - sprite_h // 2
         # Include arms, horns, legs and health bars in the clipping bounds.
         half_w = int(sprite_w * 1.2) + 4
         top_ext = sprite_h // 2 + 4
@@ -405,7 +412,7 @@ def _draw_humanoid(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
 def draw_billboard(screen: pygame.Surface, font: Any, label: str,
                    wx: float, wy: float, px: float, py: float, pa: float,
                    z_buffer: DepthBuffer,
-                   bg_color: tuple[int, int, int], horizon_offset: int = 0) -> None:
+                   bg_color: tuple[int, int, int], eye_height: float = EYE_HEIGHT) -> None:
     """Draw a floating text label at world position (wx, wy)."""
     dx = wx - px
     dy = wy - py
@@ -423,7 +430,7 @@ def draw_billboard(screen: pygame.Surface, font: Any, label: str,
     font_size = max(8, min(int(200 / corrected), 60))
     text_surf, text_rect = font.render(label, WHITE, size=font_size)
     tx = screen_x - text_rect.width // 2
-    ty = HEIGHT // 2 + horizon_offset - text_rect.height // 2
+    ty = _eye_row(corrected, eye_height) - text_rect.height // 2
     bg_rect = pygame.Rect(tx - 6, ty - 4, text_rect.width + 12, text_rect.height + 8)
     with z_buffer.sprite(screen, bg_rect, corrected) as layer:
         if layer is None:
@@ -437,7 +444,7 @@ def draw_billboard(screen: pygame.Surface, font: Any, label: str,
 
 def draw_health_packs(screen: pygame.Surface, packs: list[Any],
                       px: float, py: float, pa: float,
-                      z_buffer: DepthBuffer, horizon_offset: int = 0) -> None:
+                      z_buffer: DepthBuffer, eye_height: float = EYE_HEIGHT) -> None:
     """Draw health packs as floating 3D crosses."""
     for hp_pack in packs:
         if not hp_pack.active:
@@ -458,7 +465,7 @@ def draw_health_packs(screen: pygame.Surface, packs: list[Any],
         screen_x = int((diff / FOV + 0.5) * WIDTH)
         size = max(int(HEIGHT / corrected * 0.25), 6)
         bob = int(math.sin(hp_pack.anim_time) * size * 0.15)
-        cy = HEIGHT // 2 + horizon_offset + bob
+        cy = _eye_row(corrected, eye_height) + bob
 
         shade = max(0.4, min(1.0, 1.0 - (corrected - 1) / MAX_DEPTH))
 
@@ -497,7 +504,7 @@ _PICKUP_HALO_COLORS = (
 
 def draw_weapon_pickups(screen: pygame.Surface, packs: list[Any],
                         px: float, py: float, pa: float,
-                        z_buffer: DepthBuffer, horizon_offset: int = 0) -> None:
+                        z_buffer: DepthBuffer, eye_height: float = EYE_HEIGHT) -> None:
     """Draw weapon pickups as floating gun silhouettes, each with a color-coded halo."""
     for pack in packs:
         if not pack.active:
@@ -518,7 +525,7 @@ def draw_weapon_pickups(screen: pygame.Surface, packs: list[Any],
         screen_x = int((diff / FOV + 0.5) * WIDTH)
         size = max(int(HEIGHT / corrected * 0.42), 14)
         bob = int(math.sin(pack.anim_time * 1.5) * size * 0.1)
-        cy = HEIGHT // 2 + horizon_offset + bob
+        cy = _eye_row(corrected, eye_height) + bob
         shade = max(0.4, min(1.0, 1.0 - (corrected - 1) / MAX_DEPTH))
 
         # Color-coded pulsing halo so weapon type reads at any distance.
@@ -744,7 +751,7 @@ def _draw_rocket_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade
 
 def draw_rockets(screen: pygame.Surface, rockets: list[Any],
                  px: float, py: float, pa: float,
-                 z_buffer: DepthBuffer, horizon_offset: int = 0) -> None:
+                 z_buffer: DepthBuffer, eye_height: float = EYE_HEIGHT) -> None:
     """Draw in-flight rockets and explosion bursts as billboard sprites."""
     visible = []
     for r in rockets:
@@ -767,7 +774,7 @@ def draw_rockets(screen: pygame.Surface, rockets: list[Any],
     visible.sort(key=lambda v: -v[0])
     for corrected, diff, r in visible:
         screen_x = int((diff / FOV + 0.5) * WIDTH)
-        cy = HEIGHT // 2 + horizon_offset
+        cy = _eye_row(corrected, eye_height)
 
         if r.exploded:
             # Explosion: growing glow that fades.

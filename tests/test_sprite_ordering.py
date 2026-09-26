@@ -10,7 +10,7 @@ import pygame
 import pygame.freetype
 
 from shooter import map as gmap
-from shooter.constants import EXPLOSION_DURATION, HEIGHT, WIDTH
+from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH
 from shooter.entities import Boss, Enemy, HealthPack, Rocket, WeaponPickup
 from shooter.game import GameState, draw_frame
 from shooter.occlusion import DepthBuffer
@@ -32,7 +32,7 @@ class SpriteOrderingTests(unittest.TestCase):
         return screen
 
     def draw_sprites(self, screen: pygame.Surface, sprites: Sequence[Sprite],
-                     angle: float = 0.0, offset: int = 0) -> None:
+                     angle: float = 0.0, eye_height: float = EYE_HEIGHT) -> None:
         draw_world_sprites(
             screen, 2.5, 5.5, angle, self.depth, self.font,
             enemies=[s for s in sprites if isinstance(s, Enemy)],
@@ -40,25 +40,25 @@ class SpriteOrderingTests(unittest.TestCase):
             weapon_pickups=[s for s in sprites if isinstance(s, WeaponPickup)],
             rockets=[s for s in sprites if isinstance(s, Rocket)],
             billboards=[s for s in sprites if isinstance(s, Billboard)],
-            horizon_offset=offset,
+            eye_height=eye_height,
         )
 
     def assert_composition(self, farther: Sprite, nearer: Sprite,
-                           angle: float = 0.0, offset: int = 0) -> None:
+                           angle: float = 0.0, eye_height: float = EYE_HEIGHT) -> None:
         # Single-object passes give a reference image with a known physical order.
         expected = self.make_screen()
-        self.draw_sprites(expected, [farther], angle, offset)
-        self.draw_sprites(expected, [nearer], angle, offset)
+        self.draw_sprites(expected, [farther], angle, eye_height)
+        self.draw_sprites(expected, [nearer], angle, eye_height)
         expected_pixels = pygame.image.tobytes(expected, 'RGB')
         reversed_order = self.make_screen()
-        self.draw_sprites(reversed_order, [nearer], angle, offset)
-        self.draw_sprites(reversed_order, [farther], angle, offset)
+        self.draw_sprites(reversed_order, [nearer], angle, eye_height)
+        self.draw_sprites(reversed_order, [farther], angle, eye_height)
         self.assertNotEqual(expected_pixels, pygame.image.tobytes(reversed_order, 'RGB'),
                             'The scene must visibly distinguish the two draw orders')
 
         for sprites in ([nearer, farther], [farther, nearer]):
             actual = self.make_screen()
-            self.draw_sprites(actual, sprites, angle, offset)
+            self.draw_sprites(actual, sprites, angle, eye_height)
             self.assertEqual(pygame.image.tobytes(actual, 'RGB'), expected_pixels)
 
     def make_foreground_objects(self, x: float) -> list[Sprite]:
@@ -114,18 +114,19 @@ class SpriteOrderingTests(unittest.TestCase):
         label = Billboard('BOSS', boss.x, boss.y, (80, 20, 80))
         self.assert_composition(boss, label)
 
-    def test_mixed_sprites_preserve_wall_clipping_and_jump_offset(self) -> None:
+    def test_mixed_sprites_preserve_wall_clipping_at_jump_height(self) -> None:
         self.depth.block_column(0, WIDTH, 1.0, 0, HEIGHT // 2)
         enemy = Enemy(4.5, 5.5)
         enemy.anim_time = 0.0
         for farther in self.make_foreground_objects(6.5):
             with self.subTest(sprite=type(farther).__name__):
-                self.assert_composition(farther, enemy, offset=137)
+                self.assert_composition(farther, enemy, eye_height=EYE_HEIGHT + 0.4)
 
         screen = self.make_screen()
         covered = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
         before = pygame.image.tobytes(screen.subsurface(covered), 'RGB')
-        self.draw_sprites(screen, [enemy, *self.make_foreground_objects(6.5)], offset=137)
+        self.draw_sprites(screen, [enemy, *self.make_foreground_objects(6.5)],
+                          eye_height=EYE_HEIGHT + 0.4)
         self.assertEqual(pygame.image.tobytes(screen.subsurface(covered), 'RGB'), before)
 
     def test_game_frame_keeps_distant_pickup_behind_enemy(self) -> None:

@@ -12,10 +12,12 @@ from typing import Any
 
 import pygame
 from shooter.constants import (
-    WIDTH, HEIGHT, HALF_FOV, NUM_RAYS, TEX_SIZE,
+    WIDTH, HEIGHT, HALF_FOV, NUM_RAYS, TEX_SIZE, EYE_HEIGHT,
     WHITE, CEIL, FLOOR,
 )
-from shooter.map import EXIT_TILE, BARRIER_TILE, DOOR_TILE, DOOR_POSITIONS, MAP_W, MAP_H
+from shooter.map import (
+    EXIT_TILE, BARRIER_TILE, BARRIER_HEIGHT, DOOR_TILE, DOOR_POSITIONS, MAP_W, MAP_H,
+)
 from shooter.occlusion import DepthBuffer
 from shooter.types import BgHit, DoorAnimMap, Textures, WallColumn
 import numpy as np
@@ -27,12 +29,12 @@ from numpy.typing import NDArray
 # ---------------------------------------------------------------------------
 def draw_floor_ceiling(screen: pygame.Surface, px: float, py: float, pa: float,
                        textures: Textures | None,
-                       horizon_offset: int = 0) -> None:
-    """Render textured floor and ceiling."""
-    horizon = HEIGHT // 2 + horizon_offset
+                       eye_height: float = EYE_HEIGHT) -> None:
+    """Render textured floor and ceiling as seen from eye_height."""
+    horizon = HEIGHT // 2
 
     if textures is not None:
-        _draw_fc_numpy(screen, px, py, pa, horizon, textures)
+        _draw_fc_numpy(screen, px, py, pa, eye_height, textures)
     else:
         pygame.draw.rect(screen, CEIL, (0, 0, WIDTH, horizon))
         pygame.draw.rect(screen, FLOOR, (0, horizon, WIDTH, HEIGHT - horizon))
@@ -70,22 +72,27 @@ class _FloorCeilingRenderer:
         self.rows: NDArray[np.float64] = np.arange(HEIGHT, dtype=np.float64)
         self.dists: NDArray[np.float64] = np.empty(HEIGHT, dtype=np.float64)
         self.shades: NDArray[np.float64] = np.empty(HEIGHT, dtype=np.float64)
-        self.horizon: int | None = None
+        self.eye_height: float | None = None
         self.door_positions: tuple[tuple[int, int], ...] | None = None
         self.door_grid: NDArray[np.bool_] = np.zeros(MAP_W * MAP_H, dtype=np.bool_)
 
     def draw(self, screen: pygame.Surface, px: float, py: float, pa: float,
-             horizon: int) -> None:
-        if horizon != self.horizon:
+             eye_height: float) -> None:
+        horizon = HEIGHT // 2
+        if eye_height != self.eye_height:
             np.subtract(self.rows, horizon, out=self.dists)
             np.abs(self.dists, out=self.dists)
             # The horizon itself is skipped; avoid dividing by zero there.
             np.maximum(self.dists, 1, out=self.dists)
-            np.divide(HEIGHT * 0.5, self.dists, out=self.dists)
+            # Rows above the horizon meet the ceiling and rows below meet the
+            # floor, at the distance where that plane's gap to the eye projects.
+            above, below = self.dists[:horizon], self.dists[horizon:]
+            np.divide(HEIGHT * (1.0 - eye_height), above, out=above)
+            np.divide(HEIGHT * eye_height, below, out=below)
             np.multiply(self.dists, 0.07, out=self.shades)
             np.subtract(1.0, self.shades, out=self.shades)
             np.clip(self.shades, 0.12, 1.0, out=self.shades)
-            self.horizon = horizon
+            self.eye_height = eye_height
 
         # Level generation mutates DOOR_POSITIONS in place, so compare its values.
         doors = tuple(DOOR_POSITIONS)
@@ -104,8 +111,7 @@ class _FloorCeilingRenderer:
         # Row-major traversal matches the surface layout and improves locality.
         pix = pygame.surfarray.pixels3d(screen).transpose(1, 0, 2)
         try:
-            for start, end, ceiling in ((0, min(HEIGHT, horizon), True),
-                                        (max(1, horizon + 1), HEIGHT, False)):
+            for start, end, ceiling in ((0, horizon, True), (horizon + 1, HEIGHT, False)):
                 self._draw_rows(pix, start, end, ceiling, px, py, ray_x, ray_y)
         finally:
             del pix
@@ -162,12 +168,12 @@ _fc_renderer: _FloorCeilingRenderer | None = None
 
 
 def _draw_fc_numpy(screen: pygame.Surface, px: float, py: float, pa: float,
-                   horizon: int, tex: Textures) -> None:
+                   eye_height: float, tex: Textures) -> None:
     """Render at full resolution with a cache bounded to one texture set."""
     global _fc_renderer
     if _fc_renderer is None or _fc_renderer.textures is not tex:
         _fc_renderer = _FloorCeilingRenderer(tex)
-    _fc_renderer.draw(screen, px, py, pa, horizon)
+    _fc_renderer.draw(screen, px, py, pa, eye_height)
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +181,7 @@ def _draw_fc_numpy(screen: pygame.Surface, px: float, py: float, pa: float,
 # ---------------------------------------------------------------------------
 def _draw_wall_slice(screen: pygame.Surface, x: int, width: int,
                      hit: WallColumn | BgHit, z_buffer: DepthBuffer,
-                     horizon: int, tex: Textures | None,
+                     eye_height: float, tex: Textures | None,
                      door_anim: DoorAnimMap | None) -> None:
     depth, offset, side, hit_tile = hit.depth, hit.offset, hit.side, hit.tile
     door_progress = 0.0
@@ -194,24 +200,22 @@ def _draw_wall_slice(screen: pygame.Surface, x: int, width: int,
         name = 'wall'
     cols = tex[name + '_cols'] if tex else None
 
-    wall_h = min(int(HEIGHT / depth), HEIGHT * 2)
     shade = max(30, 255 - int(depth * 18))
     if side == 1:
         shade = int(shade * 0.7)
-    if hit_tile == BARRIER_TILE:
-        wall_h //= 3
-        y = horizon + wall_h // 3
-    else:
-        y = horizon - wall_h // 2
 
-    # Doors retract into the ceiling, exposing the area below their bottom edge.
+    # Project world heights (floor 0, ceiling 1) from the eye to screen rows.
+    # Barriers stand on the floor. Doors retract into the ceiling, so the slab
+    # rises by its progress and the ceiling cuts off whatever passes above it.
+    scale = HEIGHT / depth
+    horizon = HEIGHT // 2
+    slab_h = BARRIER_HEIGHT if hit_tile == BARRIER_TILE else 1.0
+    tex_top = horizon + (eye_height - door_progress - slab_h) * scale
+    bottom = round(horizon + (eye_height - door_progress) * scale)
     if door_progress > 0:
-        visible_h = max(0, int((1.0 - door_progress) * wall_h))
-        src_y_offset = wall_h - visible_h
+        y = round(horizon + (eye_height - 1.0) * scale)
     else:
-        visible_h = wall_h
-        src_y_offset = 0
-    bottom = y + visible_h
+        y = round(tex_top)
 
     if hit_tile == BARRIER_TILE or door_progress > 0:
         z_buffer.block_column(x, width, depth, y, bottom)
@@ -220,57 +224,67 @@ def _draw_wall_slice(screen: pygame.Surface, x: int, width: int,
         # stay opaque even when a tall sprite extends past the projected wall.
         z_buffer.block_column(x, width, depth)
 
-    if cols and wall_h > 0:
+    vis_top = max(0, y)
+    vis_bot = min(HEIGHT, bottom)
+    if vis_bot <= vis_top:
+        return
+    if cols:
         tx = int(offset * TEX_SIZE) % TEX_SIZE
-        vis_top = max(0, y)
-        vis_bot = min(HEIGHT, bottom)
-        if vis_bot > vis_top:
-            scaled = pygame.transform.scale(cols[tx], (width, wall_h))
-            scaled.fill((shade, shade, shade), special_flags=pygame.BLEND_RGB_MULT)
-            screen.blit(scaled, (x, vis_top),
-                        area=(0, src_y_offset + vis_top - y, width, vis_bot - vis_top))
+        strip: pygame.Surface = cols[tx]
+        slab_px = slab_h * scale
+        if slab_px <= 2 * HEIGHT:
+            strip_top, strip_bot = round(tex_top), bottom
+        else:
+            # Scale only the texels that reach the screen; a wall just in front
+            # of the camera projects several screens tall.
+            texel_h = slab_px / TEX_SIZE
+            first = max(0, int((vis_top - tex_top) / texel_h))
+            last = min(TEX_SIZE, math.ceil((vis_bot - tex_top) / texel_h))
+            strip = strip.subsurface((0, first, 1, last - first))
+            strip_top = round(tex_top + first * texel_h)
+            strip_bot = round(tex_top + last * texel_h)
+        scaled = pygame.transform.scale(strip, (width, max(strip_bot, vis_bot) - strip_top))
+        scaled.fill((shade, shade, shade), special_flags=pygame.BLEND_RGB_MULT)
+        screen.blit(scaled, (x, vis_top),
+                    area=(0, vis_top - strip_top, width, vis_bot - vis_top))
     else:
         color = (shade, shade // 2 + 40, shade // 3 + 20)
-        pygame.draw.rect(screen, color, (x, y, width, max(0, bottom - y)))
+        pygame.draw.rect(screen, color, (x, vis_top, width, vis_bot - vis_top))
 
 
 def draw_3d(screen: pygame.Surface, walls: list[WallColumn], z_buffer: DepthBuffer,
             font: Any, textures: Textures | None,
-            horizon_offset: int = 0,
+            eye_height: float = EYE_HEIGHT,
             door_anim: DoorAnimMap | None = None) -> None:
     """Render walls and record the depth of their visible vertical spans."""
-    horizon = HEIGHT // 2 + horizon_offset
     col_w = max(WIDTH // NUM_RAYS, 1)
     z_buffer.clear()
-    sign_tiles: dict[int, list[int | None]] = {EXIT_TILE: [None, None]}
+    exit_cols: list[tuple[int, float]] = []  # (screen x, depth) of each exit column
     for i, wall in enumerate(walls):
         x = i * col_w
         # Paint every background obstacle, then the foreground. The same spans
         # drive sprite clipping, including stacked barriers and animated doors.
         for hit in reversed(wall.bg_hits):
             _draw_wall_slice(screen, x, col_w + 1, hit, z_buffer,
-                             horizon, textures, door_anim)
+                             eye_height, textures, door_anim)
         _draw_wall_slice(screen, x, col_w + 1, wall, z_buffer,
-                         horizon, textures, door_anim)
+                         eye_height, textures, door_anim)
 
-        if wall.tile in sign_tiles:
-            if sign_tiles[wall.tile][0] is None:
-                sign_tiles[wall.tile][0] = x
-            sign_tiles[wall.tile][1] = x + col_w
+        if wall.tile == EXIT_TILE:
+            exit_cols.append((x, wall.depth))
 
-    sign_config = {
-        EXIT_TILE: ("EXIT", (20, 80, 20)),
-    }
-    for tile_type, (label, bg_color) in sign_config.items():
-        left, right = sign_tiles[tile_type]
-        if left is None or right is None:
-            continue
-        sign_w = right - left
-        font_size = max(8, min(int(sign_w * 0.5), 60))
-        text_surf, text_rect = font.render(label, WHITE, size=font_size)
-        tx = left + sign_w // 2 - text_rect.width // 2
-        ty = horizon - text_rect.height // 2
-        bg_rect = pygame.Rect(tx - 4, ty - 2, text_rect.width + 8, text_rect.height + 4)
-        pygame.draw.rect(screen, bg_color, bg_rect)
-        pygame.draw.rect(screen, WHITE, bg_rect, 1)
-        screen.blit(text_surf, (tx, ty))
+    if not exit_cols:
+        return
+    left, right = exit_cols[0][0], exit_cols[-1][0] + col_w
+    sign_depth = exit_cols[len(exit_cols) // 2][1]
+    sign_w = right - left
+    font_size = max(8, min(int(sign_w * 0.5), 60))
+    text_surf, text_rect = font.render("EXIT", WHITE, size=font_size)
+    tx = left + sign_w // 2 - text_rect.width // 2
+    # The sign hangs at standing eye height on the exit door.
+    sign_y = HEIGHT // 2 + int((eye_height - EYE_HEIGHT) * HEIGHT / sign_depth)
+    ty = sign_y - text_rect.height // 2
+    bg_rect = pygame.Rect(tx - 4, ty - 2, text_rect.width + 8, text_rect.height + 4)
+    pygame.draw.rect(screen, (20, 80, 20), bg_rect)
+    pygame.draw.rect(screen, WHITE, bg_rect, 1)
+    screen.blit(text_surf, (tx, ty))

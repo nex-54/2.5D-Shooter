@@ -61,7 +61,8 @@ python -m shooter
 | Pistol / Shotgun / Gatling / Rockets | `1` / `2` / `3` / `4` |
 | Nuke | `0` |
 | Restart (on death) | `R` |
-| Quit | `Esc` |
+| Pause / resume | `Esc` (a click also resumes) |
+| Quit | `Q` while paused, `Esc` on the game-over screen |
 
 ## Project Layout
 

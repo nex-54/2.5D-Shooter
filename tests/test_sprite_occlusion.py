@@ -10,7 +10,7 @@ import pygame
 import pygame.freetype
 
 from shooter import map as gmap
-from shooter.constants import HEIGHT, WIDTH, EXPLOSION_DURATION
+from shooter.constants import EYE_HEIGHT, HEIGHT, WIDTH, EXPLOSION_DURATION
 from shooter.entities import Boss, Enemy, HealthPack, Rocket, Scout, Spider, WeaponPickup
 from shooter.occlusion import DepthBuffer
 from shooter.raycaster import cast_rays
@@ -37,26 +37,37 @@ class SpriteOcclusionTests(unittest.TestCase):
     def restore_maze(self) -> None:
         gmap.MAZE[:] = self.saved_maze
 
-    def draw_world(self, offset: int = 0) -> None:
+    def draw_world(self, eye_height: float = EYE_HEIGHT) -> None:
         self.screen.fill((9, 11, 13))
         walls = cast_rays(2.5, 5.5, 0.0, self.doors)
-        draw_3d(self.screen, walls, self.depth, None, None, offset, self.doors)
+        draw_3d(self.screen, walls, self.depth, None, None, eye_height, self.doors)
 
-    def draw_enemy(self, offset: int = 0) -> None:
-        draw_enemies(self.screen, [self.enemy], 2.5, 5.5, 0.0, self.depth, offset)
+    def draw_enemy(self, eye_height: float = EYE_HEIGHT) -> None:
+        draw_enemies(self.screen, [self.enemy], 2.5, 5.5, 0.0, self.depth, eye_height)
 
-    def test_barrier_hides_feet_but_preserves_visible_body_when_jumping(self) -> None:
+    def test_barrier_hides_feet_until_a_jump_sees_over_it(self) -> None:
         gmap.MAZE[5][4] = gmap.BARRIER_TILE
-        for offset in (0, 137):
-            with self.subTest(horizon_offset=offset):
-                self.draw_world(offset)
-                before = pygame.surfarray.array3d(self.screen)
-                self.draw_enemy(offset)
-                after = pygame.surfarray.array3d(self.screen)
-                # The barrier's top projects to row 440 at this camera position.
-                self.assertTrue(np.any(after[:, :440 + offset] != before[:, :440 + offset]))
-                np.testing.assert_array_equal(after[:, 440 + offset:610 + offset],
-                                              before[:, 440 + offset:610 + offset])
+        self.enemy.x = 5.5
+        self.draw_world()
+        before = pygame.surfarray.array3d(self.screen)
+        unclipped = self.screen.copy()
+        draw_enemies(unclipped, [self.enemy], 2.5, 5.5, 0.0, DepthBuffer())
+        self.draw_enemy()
+        after = pygame.surfarray.array3d(self.screen)
+        # Standing, the barrier covers rows 469-639, over the enemy's feet.
+        self.assertTrue(np.any(pygame.surfarray.array3d(unclipped)[:, 469:640]
+                               != before[:, 469:640]))
+        self.assertTrue(np.any(after[:, :469] != before[:, :469]))
+        np.testing.assert_array_equal(after[:, 469:640], before[:, 469:640])
+
+        # At the top of a jump the eye clears the barrier, so the whole enemy shows.
+        eye = EYE_HEIGHT + 0.4
+        self.draw_world(eye)
+        expected = self.screen.copy()
+        draw_enemies(expected, [self.enemy], 2.5, 5.5, 0.0, DepthBuffer(), eye)
+        self.draw_enemy(eye)
+        self.assertEqual(pygame.image.tobytes(self.screen, 'RGB'),
+                         pygame.image.tobytes(expected, 'RGB'))
 
     def test_full_wall_hides_every_enemy_type(self) -> None:
         gmap.MAZE[5][4] = 1
@@ -122,9 +133,9 @@ class SpriteOcclusionTests(unittest.TestCase):
         before = pygame.surfarray.array3d(self.screen)
         self.draw_enemy()
         after = pygame.surfarray.array3d(self.screen)
-        # The farther barrier rises to row 418, above the nearer one's row 440.
-        self.assertTrue(np.any(after[:, :418] != before[:, :418]))
-        np.testing.assert_array_equal(after[:, 418:610], before[:, 418:610])
+        # The farther barrier rises to row 435, above the nearer one's row 469.
+        self.assertTrue(np.any(after[:, :435] != before[:, :435]))
+        np.testing.assert_array_equal(after[:, 435:640], before[:, 435:640])
 
     def test_depth_is_cleared_between_frames(self) -> None:
         gmap.MAZE[5][4] = 1
@@ -165,7 +176,7 @@ class SpriteOcclusionTests(unittest.TestCase):
                         np.testing.assert_array_equal(after, before)
                     else:
                         self.assertTrue(np.any(after != before))
-                        np.testing.assert_array_equal(after[:, 440:610], before[:, 440:610])
+                        np.testing.assert_array_equal(after[:, 469:640], before[:, 469:640])
 
     def test_partially_hidden_close_explosion_keeps_allocations_bounded(self) -> None:
         self.screen.fill((9, 11, 13))
