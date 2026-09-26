@@ -5,10 +5,20 @@ from __future__ import annotations
 import pygame
 import pygame.freetype
 
-from shooter.constants import BLACK, EYE_HEIGHT, HEIGHT, RED, WEAPONS, WHITE, WIDTH, YELLOW
+from shooter.constants import (
+    BLACK,
+    EYE_HEIGHT,
+    HEIGHT,
+    LEVEL_BANNER_DURATION,
+    RED,
+    WEAPONS,
+    WHITE,
+    WIDTH,
+    YELLOW,
+)
 from shooter.occlusion import DepthBuffer
 from shooter.raycaster import cast_rays
-from shooter.render_sprites import Billboard, draw_world_sprites
+from shooter.render_sprites import Billboard, Camera, draw_world_sprites
 from shooter.render_ui import draw_crosshair, draw_hud, draw_minimap
 from shooter.render_world import draw_3d, draw_floor_ceiling
 from shooter.state import GameState
@@ -36,13 +46,13 @@ def draw_game_over(
 def draw_level_banner(
     screen: pygame.Surface, state: GameState, big_font: pygame.freetype.Font
 ) -> None:
-    """Draw a brief 'LEVEL N' banner that fades out over ~1.2s."""
+    """Draw a brief 'LEVEL N' banner that fades out as its timer runs down."""
     if state.level_banner_timer <= 0:
         return
     # Fade alpha based on remaining time (full for first 400 ms, then linear).
-    total = 1200
+    fade_ms = LEVEL_BANNER_DURATION - 400
     remaining = max(0, state.level_banner_timer)
-    alpha = 255 if remaining > total - 400 else int(255 * remaining / (total - 400))
+    alpha = 255 if remaining > fade_ms else int(255 * remaining / fade_ms)
     overlay = pygame.Surface((WIDTH, 120), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, min(180, alpha)))
     screen.blit(overlay, (0, HEIGHT // 2 - 60))
@@ -82,9 +92,7 @@ def draw_frame(
         billboards.append(Billboard("BOSS", state.boss.x, state.boss.y, (80, 20, 80)))
     draw_world_sprites(
         screen,
-        state.px,
-        state.py,
-        state.pa,
+        Camera(state.px, state.py, state.pa, eye),
         z_buffer,
         font,
         enemies=state.enemies,
@@ -92,7 +100,6 @@ def draw_frame(
         weapon_pickups=state.weapon_pickups,
         rockets=state.rockets,
         billboards=billboards,
-        eye_height=eye,
     )
     draw_minimap(
         state.world,

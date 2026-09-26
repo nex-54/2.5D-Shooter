@@ -12,13 +12,16 @@ import random
 from dataclasses import dataclass, field
 
 # ---------------------------------------------------------------------------
-# Special tile values
+# Tile values
 # ---------------------------------------------------------------------------
+FLOOR_TILE = 0
+WALL_TILE = 1
 EXIT_TILE = 2
 BARRIER_TILE = 4
 DOOR_TILE = 5
 
-BARRIER_HEIGHT = 1 / 3  # in wall heights; jumping 0.3 high clears a barrier
+BARRIER_HEIGHT = 1 / 3  # in wall heights
+BARRIER_CLEARANCE = 0.3  # jump height that carries the player over a barrier
 
 # ---------------------------------------------------------------------------
 # Map dimensions (constant across levels)
@@ -26,15 +29,25 @@ BARRIER_HEIGHT = 1 / 3  # in wall heights; jumping 0.3 high clears a barrier
 MAP_W = 20
 MAP_H = 20
 
+# The player starts here. The maze is carved from it, so it must be an odd cell.
+START_TILE: tuple[int, int] = (1, 1)
+
+
+def start_distance(col: int, row: int) -> int:
+    """Manhattan distance in tiles from the player's start."""
+    return abs(col - START_TILE[0]) + abs(row - START_TILE[1])
+
 
 @dataclass
 class LevelState:
     """One game's map and spawn locations; never shared between game sessions."""
 
-    maze: list[list[int]] = field(default_factory=lambda: [[1] * MAP_W for _ in range(MAP_H)])
+    maze: list[list[int]] = field(
+        default_factory=lambda: [[WALL_TILE] * MAP_W for _ in range(MAP_H)]
+    )
     door_positions: list[tuple[int, int]] = field(default_factory=list[tuple[int, int]])
     exit_pos: tuple[int, int] = (MAP_W - 2, MAP_H - 1)
-    player_spawn: tuple[float, float] = (1.5, 1.5)
+    player_spawn: tuple[float, float] = (START_TILE[0] + 0.5, START_TILE[1] + 0.5)
     boss_spawn: tuple[float, float] = (MAP_W - 4.5, MAP_H - 2.5)
 
     def tile_at(self, x: float, y: float) -> int:
@@ -42,36 +55,36 @@ class LevelState:
         mx, my = math.floor(x), math.floor(y)
         if 0 <= mx < MAP_W and 0 <= my < MAP_H:
             return self.maze[my][mx]
-        return 1
+        return WALL_TILE
 
     def is_blocked(self, x: float, y: float, jump_h: float, exit_open: bool = False) -> bool:
         """Check if position is blocked considering jump height.
 
         The exit is a closed door until exit_open is set (the level boss is dead)."""
         t = self.tile_at(x, y)
-        if t == 1 or t == DOOR_TILE:
+        if t == WALL_TILE or t == DOOR_TILE:
             return True
         if t == EXIT_TILE and not exit_open:
             return True
-        if t == BARRIER_TILE and jump_h < 0.3:
+        if t == BARRIER_TILE and jump_h < BARRIER_CLEARANCE:
             return True
         return False
 
     def is_obstacle(self, x: float, y: float) -> bool:
         """Check if a tile blocks movement (walls, barriers, and closed doors)."""
         t = self.tile_at(x, y)
-        return t == 1 or t == BARRIER_TILE or t == DOOR_TILE
+        return t == WALL_TILE or t == BARRIER_TILE or t == DOOR_TILE
 
     def is_solid(self, x: float, y: float) -> bool:
         """Check if a tile blocks rays (walls, exit, barrier, and door tiles)."""
         t = self.tile_at(x, y)
-        return t == 1 or t == EXIT_TILE or t == BARRIER_TILE or t == DOOR_TILE
+        return t == WALL_TILE or t == EXIT_TILE or t == BARRIER_TILE or t == DOOR_TILE
 
     def blocks_sight(self, x: float, y: float) -> bool:
         """Check if a tile blocks sight and projectiles (walls and closed doors).
         Barriers sit below eye level, so shots, rockets, and enemies see over them."""
         t = self.tile_at(x, y)
-        return t == 1 or t == DOOR_TILE
+        return t == WALL_TILE or t == DOOR_TILE
 
     def wall_hit_fraction(self, x1: float, y1: float, x2: float, y2: float) -> float | None:
         """Return the fraction along a segment where it first touches a wall/door.
@@ -125,7 +138,7 @@ class LevelState:
             t = self.tile_at(cx, cy)
             if t == DOOR_TILE:
                 return (int(cx), int(cy))
-            if t == 1 or t == EXIT_TILE or t == BARRIER_TILE:
+            if t == WALL_TILE or t == EXIT_TILE or t == BARRIER_TILE:
                 return None
         return None
 
@@ -136,9 +149,10 @@ class LevelState:
 def _carve_maze(rng: random.Random, grid: list[list[int]]) -> None:
     """Recursive backtracker on odd cells. grid must start as all walls."""
     # Visit cells at odd indices: (1,1), (1,3), ..., (MAP_W-2, MAP_H-2)
-    stack = [(1, 1)]
-    grid[1][1] = 0
-    visited = {(1, 1)}
+    stack = [START_TILE]
+    start_c, start_r = START_TILE
+    grid[start_r][start_c] = FLOOR_TILE
+    visited = {START_TILE}
     while stack:
         c, r = stack[-1]
         neighbours: list[tuple[int, int, int, int]] = []
@@ -151,8 +165,8 @@ def _carve_maze(rng: random.Random, grid: list[list[int]]) -> None:
             continue
         nc, nr, dc, dr = rng.choice(neighbours)
         # Knock down the wall between (c, r) and (nc, nr).
-        grid[r + dr // 2][c + dc // 2] = 0
-        grid[nr][nc] = 0
+        grid[r + dr // 2][c + dc // 2] = FLOOR_TILE
+        grid[nr][nc] = FLOOR_TILE
         visited.add((nc, nr))
         stack.append((nc, nr))
 
@@ -162,16 +176,16 @@ def _open_extra_walls(rng: random.Random, grid: list[list[int]], count: int) -> 
     candidates: list[tuple[int, int]] = []
     for r in range(1, MAP_H - 1):
         for c in range(1, MAP_W - 1):
-            if grid[r][c] != 1:
+            if grid[r][c] != WALL_TILE:
                 continue
             # Needs at least two opposing open neighbours so removal creates a loop/passage.
-            horiz = grid[r][c - 1] == 0 and grid[r][c + 1] == 0
-            vert = grid[r - 1][c] == 0 and grid[r + 1][c] == 0
+            horiz = grid[r][c - 1] == FLOOR_TILE and grid[r][c + 1] == FLOOR_TILE
+            vert = grid[r - 1][c] == FLOOR_TILE and grid[r + 1][c] == FLOOR_TILE
             if horiz or vert:
                 candidates.append((c, r))
     rng.shuffle(candidates)
     for c, r in candidates[:count]:
-        grid[r][c] = 0
+        grid[r][c] = FLOOR_TILE
 
 
 def _place_exit(rng: random.Random, grid: list[list[int]]) -> tuple[int, int]:
@@ -184,23 +198,23 @@ def _place_exit(rng: random.Random, grid: list[list[int]]) -> tuple[int, int]:
     anchors: list[tuple[int, int]] = []
     for r in range(MAP_H // 2 | 1, MAP_H - 1, 2):
         for c in range(MAP_W // 2 | 1, MAP_W - 1, 2):
-            if grid[r][c] == 0:
+            if grid[r][c] == FLOOR_TILE:
                 anchors.append((c, r))
     if not anchors:
         # Degenerate fallback: use (MAP_W-3, MAP_H-3) — an odd cell that DFS visits.
         ac, ar = MAP_W - 3, MAP_H - 3
-        grid[ar][ac] = 0
+        grid[ar][ac] = FLOOR_TILE
         anchors.append((ac, ar))
     ac, ar = rng.choice(anchors)
 
     # Choose whether to exit through the bottom or the right edge.
     if rng.random() < 0.5:
         for r in range(ar + 1, MAP_H - 1):
-            grid[r][ac] = 0
+            grid[r][ac] = FLOOR_TILE
         ex, ey = ac, MAP_H - 1
     else:
         for c in range(ac + 1, MAP_W - 1):
-            grid[ar][c] = 0
+            grid[ar][c] = FLOOR_TILE
         ex, ey = MAP_W - 1, ar
     grid[ey][ex] = EXIT_TILE
     return ex, ey
@@ -211,13 +225,13 @@ def _pick_boss_tile(rng: random.Random, grid: list[list[int]], ex: int, ey: int)
     candidates: list[tuple[int, int]] = []
     for r in range(max(1, ey - 3), min(MAP_H - 1, ey + 4)):
         for c in range(max(1, ex - 3), min(MAP_W - 1, ex + 4)):
-            if grid[r][c] == 0 and (abs(c - 1) + abs(r - 1)) > 5:
+            if grid[r][c] == FLOOR_TILE and start_distance(c, r) > 5:
                 candidates.append((c, r))
     if not candidates:
         # Fallback: any floor tile far from start.
         for r in range(MAP_H // 2, MAP_H - 1):
             for c in range(MAP_W // 2, MAP_W - 1):
-                if grid[r][c] == 0:
+                if grid[r][c] == FLOOR_TILE:
                     candidates.append((c, r))
     return rng.choice(candidates)
 
@@ -227,18 +241,18 @@ def _place_doors(rng: random.Random, grid: list[list[int]], count: int) -> list[
     candidates: list[tuple[int, int]] = []
     for r in range(1, MAP_H - 1):
         for c in range(1, MAP_W - 1):
-            if grid[r][c] != 0:
+            if grid[r][c] != FLOOR_TILE:
                 continue
-            if (c, r) == (1, 1):
+            if (c, r) == START_TILE:
                 continue
             left = grid[r][c - 1]
             right = grid[r][c + 1]
             up = grid[r - 1][c]
             down = grid[r + 1][c]
-            # Horizontal corridor: walls above and below, floors left and right.
-            if up == 1 and down == 1 and left == 0 and right == 0:
-                candidates.append((c, r))
-            elif left == 1 and right == 1 and up == 0 and down == 0:
+            # Corridor: walls on two opposite sides, floors on the other two.
+            horizontal = up == down == WALL_TILE and left == right == FLOOR_TILE
+            vertical = left == right == WALL_TILE and up == down == FLOOR_TILE
+            if horizontal or vertical:
                 candidates.append((c, r))
     rng.shuffle(candidates)
     placed: list[tuple[int, int]] = []
@@ -260,9 +274,9 @@ def _place_barriers(
     candidates: list[tuple[int, int]] = []
     for r in range(2, MAP_H - 2):
         for c in range(2, MAP_W - 2):
-            if grid[r][c] != 0:
+            if grid[r][c] != FLOOR_TILE:
                 continue
-            if abs(c - 1) + abs(r - 1) < 4:
+            if start_distance(c, r) < 4:
                 continue
             if abs(c - ex) + abs(r - ey) < 3:
                 continue
@@ -274,11 +288,12 @@ def _place_barriers(
 
 def generate_level(level: int, rng: random.Random) -> LevelState:
     """Build a fresh level using a caller-owned source of randomness."""
-    grid = [[1] * MAP_W for _ in range(MAP_H)]
+    grid = [[WALL_TILE] * MAP_W for _ in range(MAP_H)]
     _carve_maze(rng, grid)
     # Slightly more loops on later levels keeps things interesting.
     _open_extra_walls(rng, grid, 20 + min(level, 5))
-    grid[1][1] = 0  # guarantee player start is floor
+    start_c, start_r = START_TILE
+    grid[start_r][start_c] = FLOOR_TILE  # guarantee player start is floor
 
     ex, ey = _place_exit(rng, grid)
     doors = _place_doors(rng, grid, rng.randint(3, 5))

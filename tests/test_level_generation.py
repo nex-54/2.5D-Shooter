@@ -6,6 +6,7 @@ from collections import deque
 from unittest.mock import MagicMock
 
 from shooter.constants import SPAWN_HEALTH_PACK_COUNT, SPAWN_WEAPON_PICKUP_COUNT
+from shooter.entities import Boss
 from shooter.map import DOOR_TILE, MAP_H, MAP_W
 from shooter.simulation import update_doors
 from shooter.state import GameState, start_level
@@ -46,7 +47,7 @@ class LevelGenerationTests(unittest.TestCase):
                     self.assertEqual(len(state.health_packs), SPAWN_HEALTH_PACK_COUNT)
                     self.assertEqual(len(state.weapon_pickups), SPAWN_WEAPON_PICKUP_COUNT)
                     self.assertEqual({p.weapon_type for p in state.weapon_pickups}, {0, 1, 2, 3})
-                    self.assertEqual(sum(e.is_boss for e in state.enemies), 1)
+                    self.assertEqual(sum(isinstance(e, Boss) for e in state.enemies), 1)
 
     def test_assets_and_gameplay_randomness_do_not_change_seeded_levels(self) -> None:
         first, second = GameState(seed=37), GameState(seed=37)

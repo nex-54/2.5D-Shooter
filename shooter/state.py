@@ -7,11 +7,13 @@ import random
 from shooter import map as gmap
 from shooter.constants import (
     INITIAL_AMMO,
+    LEVEL_BANNER_DURATION,
     PLAYER_MAX_HP,
     SPAWN_REGULAR_COUNT,
     SPAWN_SCOUT_COUNT,
     SPAWN_SPIDER_COUNT,
     WEAPONS,
+    Weapon,
 )
 from shooter.entities import (
     Boss,
@@ -49,8 +51,8 @@ class GameState:
             damage_cooldown -- ms of i-frames remaining after taking a hit.
             kills           -- enemies killed this level (drives HUD "X / Y").
 
-        Weapons (see constants.WEAPONS for indices)
-            weapon       -- currently equipped weapon index (0..4).
+        Weapons (see constants.Weapon and constants.WEAPONS)
+            weapon       -- currently equipped Weapon.
             ammo         -- per-pool ammo counts; index via WEAPONS[weapon].ammo_pool.
             owned        -- which weapons the player has picked up.
             shooting     -- True while the firing animation is playing.
@@ -95,12 +97,7 @@ class GameState:
         self.world = LevelState()
 
         # Player position & physics
-        self.px = self.world.player_spawn[0]
-        self.py = self.world.player_spawn[1]
-        self.pa = 0.0
-        self.jump_vel = 0.0
-        self.jump_height = 0.0
-        self.on_ground = True
+        self.spawn_player()
 
         # Player combat
         self.hp = PLAYER_MAX_HP
@@ -108,7 +105,7 @@ class GameState:
         self.kills = 0
 
         # Weapons
-        self.weapon = 0
+        self.weapon: Weapon = Weapon.PISTOL
         self.ammo: list[int] = list(INITIAL_AMMO)
         self.owned = [weapon.initially_owned for weapon in WEAPONS]
         self.shooting = False
@@ -140,6 +137,26 @@ class GameState:
         self.weapon_pickups: list[WeaponPickup] = []
         self.rockets: list[Rocket] = []
 
+    def spawn_player(self) -> None:
+        """Stand the player at this level's spawn point, facing angle 0."""
+        self.px, self.py = self.world.player_spawn
+        self.pa = 0.0
+        self.jump_vel = 0.0
+        self.jump_height = 0.0
+        self.on_ground = True
+
+    def switch_weapon(self, weapon: Weapon) -> None:
+        """Equip a different weapon, ready to fire.
+
+        Re-selecting the equipped weapon changes nothing, so weapon keys can't
+        zero shoot_timer and bypass the rate of fire.
+        """
+        if weapon == self.weapon:
+            return
+        self.weapon = weapon
+        self.shoot_timer = 0
+        self.shooting = False
+
     @property
     def exit_open(self) -> bool:
         """The exit unlocks once the level boss is dead."""
@@ -155,12 +172,7 @@ def start_level(state: GameState, level: int) -> None:
     state.world = gmap.generate_level(level, state.level_rng)
 
     # Reposition player to the fresh spawn and clear per-level transient state.
-    state.px = state.world.player_spawn[0]
-    state.py = state.world.player_spawn[1]
-    state.pa = 0.0
-    state.jump_vel = 0.0
-    state.jump_height = 0.0
-    state.on_ground = True
+    state.spawn_player()
     state.door_anim = {}
     state.damage_cooldown = 0
     state.shoot_timer = 0
@@ -185,7 +197,6 @@ def start_level(state: GameState, level: int) -> None:
     )
     state.boss = Boss(*state.world.boss_spawn, random.Random(state.level_rng.getrandbits(64)))
     state.enemies.append(state.boss)
-    used_tiles.add(boss_tile)
     state.total_enemies = len(state.enemies)
     state.rockets = []
     state.gatling_spin = 0.0
@@ -194,7 +205,7 @@ def start_level(state: GameState, level: int) -> None:
 
     state.hp = PLAYER_MAX_HP  # refill health on each new level
     state.level = level
-    state.level_banner_timer = 1200  # ms
+    state.level_banner_timer = LEVEL_BANNER_DURATION
     state.spawn_grace = 2000  # ms — no enemy damage while player gets oriented
     state.kills = 0  # per-level kill counter so HUD "X/Y" stays meaningful
 

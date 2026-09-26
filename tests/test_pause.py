@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pygame
 
-from shooter.constants import WEAPONS
+from shooter.constants import WEAPONS, Weapon
 from shooter.input import handle_events
 from shooter.state import GameState
 
@@ -33,13 +33,13 @@ class PauseTests(unittest.TestCase):
         self.assertFalse(self.state.paused)
 
     def test_paused_game_ignores_aim_weapon_keys_and_the_resuming_click(self) -> None:
-        self.state.owned[1] = True
-        self.state.ammo[WEAPONS[1].ammo_pool] = 10
+        self.state.owned[Weapon.SHOTGUN] = True
+        self.state.ammo[WEAPONS[Weapon.SHOTGUN].ammo_pool] = 10
         self.send(key(pygame.K_ESCAPE))
         ammo = list(self.state.ammo)
         self.send(pygame.event.Event(pygame.MOUSEMOTION, rel=(200, 0)), key(pygame.K_2))
         self.assertEqual(self.state.pa, 0.0)
-        self.assertEqual(self.state.weapon, 0)
+        self.assertEqual(self.state.weapon, Weapon.PISTOL)
 
         self.send(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1))
         self.assertFalse(self.state.paused)

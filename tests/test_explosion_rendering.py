@@ -10,7 +10,7 @@ import pygame
 from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH
 from shooter.entities import Rocket
 from shooter.occlusion import DepthBuffer
-from shooter.render_sprites import draw_rockets
+from shooter.render_sprites import Camera, draw_rocket
 
 
 class ExplosionRenderingTests(unittest.TestCase):
@@ -29,9 +29,8 @@ class ExplosionRenderingTests(unittest.TestCase):
         rocket.exploded = True
         rocket.explosion_timer = EXPLOSION_DURATION // 4
         # Raising the eye by shift * depth / HEIGHT lowers the sprite by shift pixels.
-        draw_rockets(
-            screen, [rocket], 0.0, 0.0, 0.0, self.depth, EYE_HEIGHT + shift * distance / HEIGHT
-        )
+        camera = Camera(0.0, 0.0, 0.0, EYE_HEIGHT + shift * distance / HEIGHT)
+        draw_rocket(screen, rocket, camera, self.depth)
 
     def test_close_explosions_bound_allocations_and_preserve_fade(self) -> None:
         # At this age the core is one-quarter opaque and covers the viewport.

@@ -18,13 +18,14 @@ from shooter.constants import (
     HEIGHT,
     MINIMAP_MARGIN,
     MINIMAP_SCALE,
+    PLAYER_MAX_HP,
     RED,
     WHITE,
     WIDTH,
     YELLOW,
 )
-from shooter.entities import Enemy, HealthPack, Rocket, WeaponPickup
-from shooter.map import BARRIER_TILE, DOOR_TILE, MAP_H, MAP_W, LevelState
+from shooter.entities import Boss, Enemy, HealthPack, Rocket, WeaponPickup
+from shooter.map import BARRIER_TILE, DOOR_TILE, MAP_H, MAP_W, START_TILE, WALL_TILE, LevelState
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +54,7 @@ def draw_minimap(
 
     for r in range(MAP_H):
         for c in range(MAP_W):
-            if world.maze[r][c] == 1:
+            if world.maze[r][c] == WALL_TILE:
                 pygame.draw.rect(
                     screen,
                     GRAY,
@@ -82,8 +83,11 @@ def draw_minimap(
             MINIMAP_SCALE,
         ),
     )
+    start_c, start_r = START_TILE
     pygame.draw.rect(
-        screen, BLUE, (mx + 1 * MINIMAP_SCALE, my + 1 * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE)
+        screen,
+        BLUE,
+        (mx + start_c * MINIMAP_SCALE, my + start_r * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE),
     )
 
     for hp_pack in health_packs:
@@ -107,15 +111,9 @@ def draw_minimap(
         if e.alive:
             ex = int(mx + e.x * MINIMAP_SCALE)
             ey = int(my + e.y * MINIMAP_SCALE)
-            if e.is_boss:
-                pygame.draw.circle(screen, (180, 40, 180), (ex, ey), 5)
-                pygame.draw.circle(screen, RED, (ex, ey), 5, 1)
-            elif e.is_scout:
-                pygame.draw.circle(screen, (50, 200, 70), (ex, ey), 2)
-            elif e.is_spider:
-                pygame.draw.circle(screen, (140, 80, 30), (ex, ey), 3)
-            else:
-                pygame.draw.circle(screen, RED, (ex, ey), 3)
+            pygame.draw.circle(screen, e.minimap_color, (ex, ey), e.minimap_radius)
+            if isinstance(e, Boss):
+                pygame.draw.circle(screen, RED, (ex, ey), e.minimap_radius, 1)
 
     for rk in rockets:
         if not rk.alive or rk.exploded:
@@ -167,7 +165,7 @@ def draw_hud(
 ) -> None:
     """Draw the bottom HUD bar (HP, ammo, kills, weapon name, level)."""
     pygame.draw.rect(screen, DARK, (20, HEIGHT - 50, 204, 24))
-    bar_w = int(200 * max(hp, 0) / 100)
+    bar_w = int(200 * max(hp, 0) / PLAYER_MAX_HP)
     bar_color = GREEN if hp > 40 else RED
     pygame.draw.rect(screen, bar_color, (22, HEIGHT - 48, bar_w, 20))
     hp_text, _ = font.render(f"HP: {max(0, hp)}", WHITE)

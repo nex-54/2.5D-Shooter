@@ -4,6 +4,7 @@ Global constants, colors, and shared config for the game.
 
 import math
 from dataclasses import dataclass
+from enum import IntEnum
 
 # ---------------------------------------------------------------------------
 # Display
@@ -71,8 +72,18 @@ GRAVITY = 0.000009
 
 
 # ---------------------------------------------------------------------------
-# Weapons  (indices: 0=pistol, 1=shotgun, 2=gatling, 3=rocket launcher, 4=nuke)
+# Weapons
 # ---------------------------------------------------------------------------
+class Weapon(IntEnum):
+    """Weapon ids, which index WEAPONS and the player's owned flags."""
+
+    PISTOL = 0
+    SHOTGUN = 1
+    GATLING = 2
+    ROCKETS = 3
+    NUKE = 4
+
+
 @dataclass(frozen=True)
 class WeaponDefinition:
     name: str
@@ -82,7 +93,7 @@ class WeaponDefinition:
     initially_owned: bool = False
 
 
-# Pistol and gatling share ammo pool 0.
+# Indexed by Weapon. Pistol and gatling share ammo pool 0.
 WEAPONS = (
     WeaponDefinition("Pistol", 0, 200, 15, True),
     WeaponDefinition("Shotgun", 1, 600, 8),
@@ -119,6 +130,7 @@ FOOTSTEP_SPRINT_INTERVAL = 200
 DOOR_OPEN_DURATION = 5000  # ms before a door auto-closes
 DOOR_RETRY_DELAY = 500  # ms to retry closing an occupied door
 DOOR_ANIM_DURATION = 400  # ms for a door to slide open or closed
+LEVEL_BANNER_DURATION = 1200  # ms the "LEVEL N" banner stays up
 
 # ---------------------------------------------------------------------------
 # Spawning

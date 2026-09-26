@@ -9,7 +9,12 @@ import random
 
 import pygame
 
-from shooter.constants import HEIGHT, WIDTH
+from shooter.constants import HEIGHT, WEAPONS, WIDTH, Weapon
+
+
+def _cooldown(weapon: Weapon, shoot_timer: int) -> float:
+    """Share of the weapon's fire interval still to run: 1.0 on firing, <= 0 once ready."""
+    return shoot_timer / WEAPONS[weapon].fire_interval_ms
 
 
 def draw_gatling(
@@ -112,7 +117,7 @@ def draw_gatling(
     pygame.draw.rect(screen, (70, 58, 42), (fg_l, fg_t, 4, 35))
 
     # --- Muzzle flash ---
-    if shooting and shoot_timer > 30:
+    if shooting and _cooldown(Weapon.GATLING, shoot_timer) > 0.5:
         flash_x = barrel_cx
         flash_y = barrel_cy - barrel_len - 20
         flash_surf = pygame.Surface((120, 120), pygame.SRCALPHA)
@@ -143,8 +148,8 @@ def draw_shotgun(
 
     recoil_y = 0
     pump_offset = 0
-    if shoot_timer > 0:
-        t = shoot_timer / 600.0
+    t = _cooldown(Weapon.SHOTGUN, shoot_timer)
+    if t > 0:
         if t > 0.75:
             kick = (t - 0.75) / 0.25
             recoil_y = int(kick * 45)
@@ -214,7 +219,7 @@ def draw_shotgun(
     pygame.draw.rect(screen, (80, 80, 85), (barrel_l + barrel_w // 2 - 2, barrel_t - 6, 4, 6))
 
     # --- Muzzle flash ---
-    if shooting and shoot_timer > 450:
+    if shooting and t > 0.75:
         flash_x = barrel_l + barrel_w // 2
         flash_y = barrel_t - 20
         flash_surf = pygame.Surface((140, 140), pygame.SRCALPHA)
@@ -244,8 +249,8 @@ def _draw_pistol(
         bob_y = int(math.sin(game_time * 2) * 2)
 
     recoil_y = 0
-    if shoot_timer > 0:
-        t = shoot_timer / 200.0
+    t = _cooldown(Weapon.PISTOL, shoot_timer)
+    if t > 0:
         if t > 0.7:
             kick = (t - 0.7) / 0.3
             recoil_y = int(kick * 30)
@@ -315,7 +320,7 @@ def _draw_pistol(
     pygame.draw.rect(screen, (90, 90, 95), (slide_l + slide_w - 8, slide_t - 3, 4, 4))
 
     # --- Muzzle flash ---
-    if shooting and shoot_timer > 150:
+    if shooting and t > 0.75:
         flash_x = barrel_x + 7
         flash_y = barrel_t - 15
         flash_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
@@ -346,8 +351,8 @@ def _draw_rocket_launcher(
 
     # Recoil kicks the tube downward briefly after firing.
     recoil_y = 0
-    if shoot_timer > 0:
-        t = shoot_timer / 800.0
+    t = _cooldown(Weapon.ROCKETS, shoot_timer)
+    if t > 0:
         if t > 0.8:
             kick = (t - 0.8) / 0.2
             recoil_y = int(kick * 50)
@@ -504,7 +509,7 @@ def _draw_rocket_launcher(
         pygame.draw.ellipse(screen, hand_skin, (fwd_hand_x + 28, fy, 14, 11))
 
     # --- Muzzle flash + backblast on fire ---
-    if shooting and shoot_timer > 600:
+    if shooting and t > 0.75:
         flash_cx = tube_l + tube_w // 2
         flash_cy = muzzle_t - 10
         flash_surf = pygame.Surface((220, 220), pygame.SRCALPHA)
@@ -586,7 +591,7 @@ def _draw_nuke_detonator(
             screen, hand_skin, (box_l + box_w - 10 + i * 4, box_t + box_h - 20 + i * 6, 12, 16)
         )
 
-    if shooting and shoot_timer > 900:
+    if shooting and _cooldown(Weapon.NUKE, shoot_timer) > 0.75:
         glow = pygame.Surface((120, 120), pygame.SRCALPHA)
         pygame.draw.circle(glow, (255, 80, 80, 120), (60, 60), 55)
         pygame.draw.circle(glow, (255, 200, 200, 200), (60, 60), 25)
@@ -599,17 +604,17 @@ def draw_weapon(
     shoot_timer: int,
     player_moving: bool,
     game_time: float,
-    weapon: int,
+    weapon: Weapon,
     gatling_spin: float,
 ) -> None:
     """Draw the current weapon viewmodel."""
-    if weapon == 1:
+    if weapon == Weapon.SHOTGUN:
         draw_shotgun(screen, shooting, shoot_timer, player_moving, game_time)
-    elif weapon == 2:
+    elif weapon == Weapon.GATLING:
         draw_gatling(screen, shooting, shoot_timer, player_moving, game_time, gatling_spin)
-    elif weapon == 3:
+    elif weapon == Weapon.ROCKETS:
         _draw_rocket_launcher(screen, shooting, shoot_timer, player_moving, game_time)
-    elif weapon == 4:
+    elif weapon == Weapon.NUKE:
         _draw_nuke_detonator(screen, shooting, shoot_timer, player_moving, game_time)
     else:
         _draw_pistol(screen, shooting, shoot_timer, player_moving, game_time)

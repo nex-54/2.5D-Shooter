@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pygame
 
 from shooter.combat import update_rockets
-from shooter.constants import WEAPONS
+from shooter.constants import WEAPONS, Weapon
 from shooter.entities import Enemy, Rocket
 from shooter.input import handle_events
 from shooter.map import BARRIER_TILE, DOOR_TILE
@@ -64,9 +64,9 @@ class RocketCollisionTests(unittest.TestCase):
     def test_muzzle_hits_close_wall_and_applies_self_damage_on_clear_side(self) -> None:
         self.state.world.maze[5][5] = 1
         self.state.px, self.state.py = 4.79, 5.5
-        self.state.weapon = 3
-        self.state.owned[3] = True
-        self.state.ammo[WEAPONS[3].ammo_pool] = 1
+        self.state.weapon = Weapon.ROCKETS
+        self.state.owned[Weapon.ROCKETS] = True
+        self.state.ammo[WEAPONS[Weapon.ROCKETS].ammo_pool] = 1
         click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1)
         with patch("shooter.input.pygame.event.get", return_value=[click]):
             handle_events(self.state, self.sfx, set())

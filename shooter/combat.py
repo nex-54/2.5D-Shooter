@@ -19,8 +19,9 @@ from shooter.constants import (
     SHOTGUN_RANGE,
     SHOTGUN_SPREAD,
     WEAPONS,
+    Weapon,
 )
-from shooter.entities import Rocket, apply_hit, hitscan
+from shooter.entities import Boss, Enemy, Rocket, apply_hit, hitscan
 from shooter.state import GameState
 from shooter.types import Sfx
 
@@ -46,16 +47,22 @@ def _begin_shot(state: GameState, sfx: Sfx) -> bool:
     return True
 
 
+def _hit(state: GameState, enemy: Enemy, sfx: Sfx, damage: int = 1) -> None:
+    """Damage an enemy, counting the kill if this hit finishes it."""
+    if apply_hit(enemy, sfx, damage):
+        state.kills += 1
+
+
 def fire_weapon(state: GameState, sfx: Sfx) -> None:
     """Fire click-operated weapons, respecting ownership, ammo, and cooldown."""
-    if state.weapon == 2 or not _begin_shot(state, sfx):
+    if state.weapon == Weapon.GATLING or not _begin_shot(state, sfx):
         return
-    if state.weapon == 0:
+    if state.weapon == Weapon.PISTOL:
         sfx["pistol"].play()
         target = hitscan(state.world, state.enemies, state.px, state.py, state.pa)
-        if target and apply_hit(target, sfx, PISTOL_DAMAGE):
-            state.kills += 1
-    elif state.weapon == 1:
+        if target is not None:
+            _hit(state, target, sfx, PISTOL_DAMAGE)
+    elif state.weapon == Weapon.SHOTGUN:
         sfx["shotgun"].play()
         for _ in range(SHOTGUN_PELLETS):
             spread = state.rng.uniform(-SHOTGUN_SPREAD, SHOTGUN_SPREAD)
@@ -68,21 +75,20 @@ def fire_weapon(state: GameState, sfx: Sfx) -> None:
                 spread=spread,
                 max_range=SHOTGUN_RANGE,
             )
-            if target and apply_hit(target, sfx):
-                state.kills += 1
-    elif state.weapon == 3:
+            if target is not None:
+                _hit(state, target, sfx)
+    elif state.weapon == Weapon.ROCKETS:
         sfx["rocket_fire"].play()
         rocket = Rocket(state.px, state.py, state.pa)
         state.rockets.append(rocket)
         # Sweep the muzzle offset too: a close wall must detonate on our side.
         _move_rocket(state, rocket, 0.4, sfx)
-    elif state.weapon == 4:
+    elif state.weapon == Weapon.NUKE:
         sfx["explosion"].play()
         for e in state.enemies:
-            if not e.alive or e.is_boss:
+            if not e.alive or isinstance(e, Boss):
                 continue
-            if apply_hit(e, sfx, e.hp):
-                state.kills += 1
+            _hit(state, e, sfx, e.hp)
 
 
 def update_combat(state: GameState, dt: int, sfx: Sfx) -> None:
@@ -92,7 +98,7 @@ def update_combat(state: GameState, dt: int, sfx: Sfx) -> None:
     if state.shoot_timer <= 0:
         state.shooting = False
 
-    if state.weapon == 2 and state.mouse_held and not state.game_over:
+    if state.weapon == Weapon.GATLING and state.mouse_held and not state.game_over:
         state.gatling_speed = 0.08
         if _begin_shot(state, sfx):
             sfx["gatling"].play()
@@ -104,8 +110,8 @@ def update_combat(state: GameState, dt: int, sfx: Sfx) -> None:
                 state.pa,
                 spread=state.rng.uniform(-GATLING_SPREAD, GATLING_SPREAD),
             )
-            if target and apply_hit(target, sfx):
-                state.kills += 1
+            if target is not None:
+                _hit(state, target, sfx)
     else:
         # Released barrels coast to a stop over 400 ms instead of unwinding.
         state.gatling_speed = max(0.0, state.gatling_speed - dt * 0.0002)
@@ -130,9 +136,7 @@ def update_enemies(state: GameState, dt: int, sfx: Sfx) -> None:
                 state.hp -= e.damage
                 e.attack_cooldown = e.attack_cooldown_duration
                 state.damage_cooldown = DAMAGE_COOLDOWN_MS
-                sfx[
-                    "boss_roar" if e.is_boss else ("spider_hiss" if e.is_spider else "enemy_attack")
-                ].play()
+                sfx[e.attack_sound].play()
                 if state.hp <= 0:
                     break
 
@@ -153,8 +157,7 @@ def _detonate_rocket(state: GameState, rocket: Rocket, sfx: Sfx) -> None:
         ):
             continue
         damage = max(1, int(ROCKET_MAX_HITS * (1.0 - distance / ROCKET_BLAST_RADIUS)))
-        if apply_hit(enemy, sfx, damage):
-            state.kills += 1
+        _hit(state, enemy, sfx, damage)
     distance = math.hypot(state.px - rocket.x, state.py - rocket.y)
     if (
         distance < ROCKET_BLAST_RADIUS

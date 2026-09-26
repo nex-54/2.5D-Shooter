@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pygame
 
-from shooter.constants import EYE_HEIGHT, HEIGHT, WIDTH
-from shooter.entities import WeaponPickup
+from shooter.constants import EYE_HEIGHT, HEIGHT, WIDTH, Weapon
+from shooter.entities import PICKUP_WEAPONS, WeaponPickup
 from shooter.occlusion import DepthBuffer
-from shooter.render_sprites import draw_weapon_pickups
+from shooter.render_sprites import Camera, draw_weapon_pickup
 
 
 class PickupRenderingTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class PickupRenderingTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.depth = DepthBuffer()
-        self.pickup = WeaponPickup(4.0, 0.0, 0)
+        self.pickup = WeaponPickup(4.0, 0.0, Weapon.PISTOL)
         self.pickup.anim_time = math.pi / 4
 
     def make_screen(self) -> pygame.Surface:
@@ -30,7 +30,7 @@ class PickupRenderingTests(unittest.TestCase):
     def draw_pickup(self, screen: pygame.Surface, shift: int = 0) -> None:
         # Translate vertically without changing the pickup's projected size.
         eye_height = EYE_HEIGHT + shift * self.pickup.x / HEIGHT
-        draw_weapon_pickups(screen, [self.pickup], 0.0, 0.0, 0.0, self.depth, eye_height)
+        draw_weapon_pickup(screen, self.pickup, Camera(0.0, 0.0, 0.0, eye_height), self.depth)
 
     def test_close_pickups_keep_allocations_within_viewport(self) -> None:
         surface_type = pygame.Surface
@@ -41,7 +41,7 @@ class PickupRenderingTests(unittest.TestCase):
             self.assertLessEqual(size[1], HEIGHT)
             return surface_type(size, flags)
 
-        for weapon_type in range(4):
+        for weapon_type in PICKUP_WEAPONS:
             for distance in (0.301, 0.31, 0.6):
                 with self.subTest(weapon_type=weapon_type, distance=distance):
                     self.pickup.weapon_type = weapon_type

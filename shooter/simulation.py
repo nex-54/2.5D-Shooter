@@ -25,7 +25,7 @@ from shooter.constants import (
     PLAYER_SPRINT_MULT,
     WEAPONS,
 )
-from shooter.map import BARRIER_TILE, DOOR_TILE
+from shooter.map import BARRIER_CLEARANCE, BARRIER_TILE, DOOR_TILE, FLOOR_TILE
 from shooter.state import GameState, check_win_lose
 from shooter.types import KeyState, Sfx
 
@@ -85,7 +85,7 @@ def update_player(
     old_px, old_py = state.px, state.py
     if dx != 0 or dy != 0:
         # Landing on a barrier's edge leaves the player standing on it, free to step off.
-        on_barrier = state.jump_height < 0.3 and _footprint_hits(
+        on_barrier = state.jump_height < BARRIER_CLEARANCE and _footprint_hits(
             state.px, state.py, lambda x, y: state.world.tile_at(x, y) == BARRIER_TILE
         )
         jh = 1.0 if on_barrier else state.jump_height
@@ -129,7 +129,7 @@ def update_doors(state: GameState, dt: int, sfx: Sfx) -> None:
             anim["progress"] += anim_step
             if anim["progress"] >= 1.0:
                 anim["progress"] = 1.0
-                state.world.maze[dr][dc] = 0
+                state.world.maze[dr][dc] = FLOOR_TILE
                 anim["phase"] = "open"
                 anim["timer"] = DOOR_OPEN_DURATION
         elif phase == "open":
@@ -187,9 +187,7 @@ def update_pickups(state: GameState, dt: int, sfx: Sfx) -> None:
             state.ammo[ai] = min(state.ammo[ai] + WEAPONS[wt].pickup_ammo, MAX_AMMO[ai])
             # Auto-switch if the new weapon outranks what we're holding.
             if wt > state.weapon:
-                state.weapon = wt
-                state.shoot_timer = 0
-                state.shooting = False
+                state.switch_weapon(wt)
             pack.active = False
             sfx["pickup"].play()
         elif state.ammo[ai] < MAX_AMMO[ai]:

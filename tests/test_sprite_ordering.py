@@ -9,11 +9,11 @@ from collections.abc import Sequence
 import pygame
 import pygame.freetype
 
-from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH
+from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH, Weapon
 from shooter.entities import Boss, Enemy, HealthPack, Rocket, WeaponPickup
 from shooter.occlusion import DepthBuffer
 from shooter.render_game import draw_frame
-from shooter.render_sprites import Billboard, draw_enemies, draw_world_sprites
+from shooter.render_sprites import Billboard, Camera, draw_enemy, draw_world_sprites
 from shooter.state import GameState
 from shooter.textures import generate_textures
 from tests.support import open_world
@@ -41,9 +41,7 @@ class SpriteOrderingTests(unittest.TestCase):
     ) -> None:
         draw_world_sprites(
             screen,
-            2.5,
-            5.5,
-            angle,
+            Camera(2.5, 5.5, angle, eye_height),
             self.depth,
             self.font,
             enemies=[s for s in sprites if isinstance(s, Enemy)],
@@ -51,7 +49,6 @@ class SpriteOrderingTests(unittest.TestCase):
             weapon_pickups=[s for s in sprites if isinstance(s, WeaponPickup)],
             rockets=[s for s in sprites if isinstance(s, Rocket)],
             billboards=[s for s in sprites if isinstance(s, Billboard)],
-            eye_height=eye_height,
         )
 
     def assert_composition(
@@ -78,7 +75,7 @@ class SpriteOrderingTests(unittest.TestCase):
 
     def make_foreground_objects(self, x: float) -> list[Sprite]:
         health = HealthPack(x, 5.5)
-        weapon = WeaponPickup(x, 5.5, 1)
+        weapon = WeaponPickup(x, 5.5, Weapon.SHOTGUN)
         health.anim_time = weapon.anim_time = 0.0
         rocket = Rocket(x, 5.5, 0.0)
         explosion = Rocket(x, 5.5, 0.0)
@@ -164,7 +161,7 @@ class SpriteOrderingTests(unittest.TestCase):
         state.health_packs = [health]
 
         expected = pygame.Surface((WIDTH, HEIGHT))
-        draw_enemies(expected, [enemy], state.px, state.py, state.pa, DepthBuffer())
+        draw_enemy(expected, enemy, Camera(state.px, state.py, state.pa), DepthBuffer())
         actual = pygame.Surface((WIDTH, HEIGHT))
         draw_frame(state, actual, self.font, generate_textures(), self.depth, False)
         # Opaque enemy torso, away from the crosshair and other HUD elements.

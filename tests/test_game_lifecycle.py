@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pygame
 
-from shooter.constants import INITIAL_AMMO, WEAPONS
+from shooter.constants import INITIAL_AMMO, WEAPONS, Weapon
 from shooter.entities import Boss, Enemy, HealthPack, Rocket
 from shooter.input import handle_events
 from shooter.map import DOOR_TILE
@@ -62,8 +62,8 @@ class GameLifecycleTests(unittest.TestCase):
                 state = GameState(seed=0)
                 state.world = open_world()
                 setattr(state, status, True)
-                state.weapon = 2
-                state.owned[2] = True
+                state.weapon = Weapon.GATLING
+                state.owned[Weapon.GATLING] = True
                 state.mouse_held = True
                 state.shoot_timer = 100
                 state.spawn_grace = 1000
@@ -90,8 +90,8 @@ class GameLifecycleTests(unittest.TestCase):
         assert boss is not None
         boss.take_damage(boss.hp)
         self.state.px, self.state.py = (v + 0.5 for v in self.state.world.exit_pos)
-        self.state.owned[1] = True
-        self.state.weapon = 1
+        self.state.owned[Weapon.SHOTGUN] = True
+        self.state.weapon = Weapon.SHOTGUN
         self.state.ammo = [17, 6, 2, 0]
         self.state.hp = 30
         self.state.kills = 7
@@ -102,8 +102,8 @@ class GameLifecycleTests(unittest.TestCase):
         self.assertIsNot(self.state.world, previous_world)
         self.assertEqual((self.state.px, self.state.py), self.state.world.player_spawn)
         self.assertEqual(self.state.ammo, [17, 6, 2, 0])
-        self.assertEqual(self.state.weapon, 1)
-        self.assertTrue(self.state.owned[1])
+        self.assertEqual(self.state.weapon, Weapon.SHOTGUN)
+        self.assertTrue(self.state.owned[Weapon.SHOTGUN])
         self.assertEqual(self.state.hp, 100)
         self.assertEqual(self.state.kills, 0)
         self.assertEqual(self.state.rockets, [])
@@ -127,7 +127,7 @@ class GameLifecycleTests(unittest.TestCase):
         self.state.hp = -5
         self.state.ammo = [0, 0, 0, 0]
         self.state.owned = [True] * 5
-        self.state.weapon = 3
+        self.state.weapon = Weapon.ROCKETS
         self.state.rockets = [Rocket(3.5, 1.5, 0)]
         restart = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r, scancode=pygame.KSCAN_R)
         with patch("shooter.input.pygame.event.get", return_value=[restart]):
@@ -136,6 +136,6 @@ class GameLifecycleTests(unittest.TestCase):
         self.assertEqual(self.state.hp, 100)
         self.assertEqual(self.state.ammo, list(INITIAL_AMMO))
         self.assertEqual(self.state.owned, [weapon.initially_owned for weapon in WEAPONS])
-        self.assertEqual(self.state.weapon, 0)
+        self.assertEqual(self.state.weapon, Weapon.PISTOL)
         self.assertEqual(self.state.rockets, [])
         self.assertEqual(self.state.world.maze, original_maze)

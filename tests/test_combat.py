@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from shooter.combat import update_combat
+from shooter.constants import Weapon
 from shooter.entities import Boss, Enemy, Scout, Spider, apply_hit, hitscan
 from shooter.state import GameState
 from tests.support import SoundMocks, open_world
@@ -59,7 +60,7 @@ class HitscanTests(unittest.TestCase):
 class GatlingSpinTests(unittest.TestCase):
     def test_released_barrels_coast_forward_to_a_stop(self) -> None:
         state = GameState()
-        state.weapon = 2
+        state.weapon = Weapon.GATLING
         state.mouse_held = True
         sfx = MagicMock()
         for _ in range(20):

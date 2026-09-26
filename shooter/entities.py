@@ -10,6 +10,7 @@ import random
 
 from shooter.constants import (
     MAX_DEPTH,
+    RED,
     SPAWN_ENEMY_MIN_DIST,
     SPAWN_HEALTH_PACK_COUNT,
     SPAWN_PICKUP_MIN_DIST,
@@ -17,8 +18,9 @@ from shooter.constants import (
     SPAWN_SCOUT_COUNT,
     SPAWN_SPIDER_COUNT,
     SPAWN_WEAPON_PICKUP_COUNT,
+    Weapon,
 )
-from shooter.map import EXIT_TILE, MAP_H, MAP_W, LevelState
+from shooter.map import EXIT_TILE, FLOOR_TILE, MAP_H, MAP_W, LevelState, start_distance
 from shooter.types import Sfx
 
 
@@ -75,9 +77,7 @@ def apply_hit(enemy: Enemy, sfx: Sfx, damage: int = 1) -> bool:
     if not enemy.alive or damage <= 0:
         return False
     if enemy.take_damage(damage):
-        sfx[
-            "boss_die" if enemy.is_boss else ("spider_die" if enemy.is_spider else "enemy_die")
-        ].play()
+        sfx[enemy.death_sound].play()
         return True
     sfx["enemy_hurt"].play()
     return False
@@ -87,41 +87,48 @@ def apply_hit(enemy: Enemy, sfx: Sfx, damage: int = 1) -> bool:
 # Enemy base class
 # ---------------------------------------------------------------------------
 class Enemy:
+    """A regular grunt. Subclasses retune the per-kind class attributes."""
+
+    max_hp = 3
+    speed = 0.0013
+    damage = 10
+    attack_range = 2.0
+    attack_cooldown_duration = 1000
+    detect_range = 8
+    lose_range = 10
+    chase_range = 999
+    chase_requires_los = False
+    always_alert = False
+    wander_speed_mult = 0.5
+    wander_timer_range = (1000, 3000)
+    wall_wander_timer_range = (500, 1500)
+    anim_speed = 0.008
+    attack_sound = "enemy_attack"
+    death_sound = "enemy_die"
+    # Half the drawn body width (torso to arms) in world units, for hitscan.
+    # Keep in step with sprite_scale, the drawn height relative to a wall.
+    hit_radius = 0.25
+    sprite_scale = 0.8
+    # Humanoid sprite colors; spiders are drawn with their own palette.
+    body_color = (180, 40, 40)
+    arm_color = (160, 35, 35)
+    minimap_color = RED
+    minimap_radius = 3
+
     def __init__(self, x: float, y: float, rng: random.Random | None = None) -> None:
         self.rng = rng if rng is not None else random.Random()
         self.x = x
         self.y = y
-        self.hp = 3
-        self.max_hp = 3
+        self.hp = self.max_hp
         self.alive = True
-        self.speed = 0.0013
         self.damage_timer = 0
         self.attack_cooldown = 0
-        self.alert = False
+        self.alert = self.always_alert
         self.wander_angle = self.rng.uniform(0, 2 * math.pi)
         self.wander_timer = 0
         self.anim_time = self.rng.uniform(0, 2 * math.pi)
         self.moving = False
         self.attacking = False
-        self.is_boss = False
-        self.is_scout = False
-        self.is_spider = False
-        # Behavior parameters (overridden by subclasses)
-        self.detect_range = 8
-        self.lose_range = 10
-        self.attack_range = 2.0
-        self.chase_range = 999
-        self.chase_requires_los = False
-        self.wander_speed_mult = 0.5
-        self.anim_speed = 0.008
-        self.wander_timer_range = (1000, 3000)
-        self.wall_wander_timer_range = (500, 1500)
-        self.always_alert = False
-        self.damage = 10
-        self.attack_cooldown_duration = 1000
-        # Half the drawn body width (torso to arms) in world units, for hitscan.
-        # Keep in step with the sprite scales in render_sprites.draw_enemies.
-        self.hit_radius = 0.25
 
     def update(self, world: LevelState, px: float, py: float, dt: int) -> None:
         if not self.alive:
@@ -205,65 +212,68 @@ class Enemy:
 class Boss(Enemy):
     """A large boss enemy guarding the exit."""
 
-    def __init__(self, x: float, y: float, rng: random.Random | None = None) -> None:
-        super().__init__(x, y, rng)
-        self.hp = 20
-        self.max_hp = 20
-        self.speed = 0.0007
-        self.is_boss = True
-        self.always_alert = True
-        self.alert = True
-        self.attack_range = 2.5
-        self.chase_range = 12
-        self.chase_requires_los = True
-        self.wander_speed_mult = 0.4
-        self.anim_speed = 0.006
-        self.wander_timer_range = (1500, 3500)
-        self.damage = 15
-        self.attack_cooldown_duration = 1200
-        self.hit_radius = 0.38
+    max_hp = 20
+    speed = 0.0007
+    damage = 15
+    attack_range = 2.5
+    attack_cooldown_duration = 1200
+    chase_range = 12
+    chase_requires_los = True
+    always_alert = True
+    wander_speed_mult = 0.4
+    wander_timer_range = (1500, 3500)
+    anim_speed = 0.006
+    attack_sound = "boss_roar"
+    death_sound = "boss_die"
+    hit_radius = 0.38
+    sprite_scale = 1.2
+    body_color = (100, 30, 140)
+    arm_color = (80, 25, 120)
+    minimap_color = (180, 40, 180)
+    minimap_radius = 5
 
 
 class Scout(Enemy):
     """A fast, nimble enemy with low HP."""
 
-    def __init__(self, x: float, y: float, rng: random.Random | None = None) -> None:
-        super().__init__(x, y, rng)
-        self.hp = 2
-        self.max_hp = 2
-        self.speed = 0.0026
-        self.is_scout = True
-        self.detect_range = 10
-        self.lose_range = 12
-        self.attack_range = 1.8
-        self.wander_speed_mult = 0.6
-        self.anim_speed = 0.012
-        self.wander_timer_range = (600, 2000)
-        self.wall_wander_timer_range = (300, 1000)
-        self.damage = 5
-        self.attack_cooldown_duration = 600
-        self.hit_radius = 0.18
+    max_hp = 2
+    speed = 0.0026
+    damage = 5
+    attack_range = 1.8
+    attack_cooldown_duration = 600
+    detect_range = 10
+    lose_range = 12
+    wander_speed_mult = 0.6
+    wander_timer_range = (600, 2000)
+    wall_wander_timer_range = (300, 1000)
+    anim_speed = 0.012
+    hit_radius = 0.18
+    sprite_scale = 0.6
+    body_color = (40, 140, 60)
+    arm_color = (30, 120, 50)
+    minimap_color = (50, 200, 70)
+    minimap_radius = 2
 
 
 class Spider(Enemy):
     """A creepy spider enemy -- fast, low, and hard to hit."""
 
-    def __init__(self, x: float, y: float, rng: random.Random | None = None) -> None:
-        super().__init__(x, y, rng)
-        self.hp = 4
-        self.max_hp = 4
-        self.speed = 0.002
-        self.is_spider = True
-        self.detect_range = 9
-        self.lose_range = 11
-        self.attack_range = 1.5
-        self.wander_speed_mult = 0.6
-        self.anim_speed = 0.014
-        self.wander_timer_range = (400, 1200)
-        self.wall_wander_timer_range = (200, 800)
-        self.damage = 8
-        self.attack_cooldown_duration = 700
-        self.hit_radius = 0.18
+    max_hp = 4
+    speed = 0.002
+    damage = 8
+    attack_range = 1.5
+    attack_cooldown_duration = 700
+    detect_range = 9
+    lose_range = 11
+    wander_speed_mult = 0.6
+    wander_timer_range = (400, 1200)
+    wall_wander_timer_range = (200, 800)
+    anim_speed = 0.014
+    attack_sound = "spider_hiss"
+    death_sound = "spider_die"
+    hit_radius = 0.18
+    sprite_scale = 0.55
+    minimap_color = (140, 80, 30)
 
 
 # ---------------------------------------------------------------------------
@@ -286,13 +296,13 @@ class WeaponPickup:
     """A gun lying on the floor. Grants the weapon on first pickup; refills ammo thereafter."""
 
     def __init__(
-        self, x: float, y: float, weapon_type: int, rng: random.Random | None = None
+        self, x: float, y: float, weapon_type: Weapon, rng: random.Random | None = None
     ) -> None:
         self.rng = rng if rng is not None else random.Random()
         self.x = x
         self.y = y
         self.active = True
-        self.weapon_type = weapon_type  # 0=pistol, 1=shotgun, 2=gatling, 3=rockets
+        self.weapon_type = weapon_type
         self.anim_time = self.rng.uniform(0, 2 * math.pi)
 
     def update(self, dt: int) -> None:
@@ -315,6 +325,10 @@ class Rocket:
 # ---------------------------------------------------------------------------
 # Spawning
 # ---------------------------------------------------------------------------
+# Weapons that can lie on the floor; the nuke's single charge comes with the player.
+PICKUP_WEAPONS = (Weapon.PISTOL, Weapon.SHOTGUN, Weapon.GATLING, Weapon.ROCKETS)
+
+
 def spawn_enemies(
     world: LevelState,
     rng: random.Random,
@@ -348,11 +362,11 @@ def spawn_enemies(
     hidden_spots: list[tuple[float, float]] = []
     for r in range(MAP_H):
         for c in range(MAP_W):
-            if world.maze[r][c] != 0 or (c, r) in used:
+            if world.maze[r][c] != FLOOR_TILE or (c, r) in used:
                 continue
             if c == boss_tx and r == boss_ty:
                 continue
-            if abs(c - 1) + abs(r - 1) <= SPAWN_ENEMY_MIN_DIST:
+            if start_distance(c, r) <= SPAWN_ENEMY_MIN_DIST:
                 continue
             pos = (c + 0.5, r + 0.5)
             if world.has_line_of_sight(psx, psy, pos[0], pos[1]):
@@ -374,21 +388,25 @@ def spawn_enemies(
     return enemies
 
 
+def _supply_spots(world: LevelState, used: set[tuple[int, int]]) -> list[tuple[float, float]]:
+    """Centers of free floor tiles far enough from the player's start for supplies."""
+    return [
+        (c + 0.5, r + 0.5)
+        for r in range(MAP_H)
+        for c in range(MAP_W)
+        if world.maze[r][c] == FLOOR_TILE
+        and (c, r) not in used
+        and start_distance(c, r) > SPAWN_PICKUP_MIN_DIST
+    ]
+
+
 def spawn_health_packs(
     world: LevelState, rng: random.Random, used: set[tuple[int, int]] | None = None
 ) -> list[HealthPack]:
     """Place health packs in open cells, spread through the maze."""
     if used is None:
         used = set()
-    spots: list[tuple[float, float]] = []
-    for r in range(MAP_H):
-        for c in range(MAP_W):
-            if (
-                world.maze[r][c] == 0
-                and (c, r) not in used
-                and abs(c - 1) + abs(r - 1) > SPAWN_PICKUP_MIN_DIST
-            ):
-                spots.append((c + 0.5, r + 0.5))
+    spots = _supply_spots(world, used)
     rng.shuffle(spots)
     n = SPAWN_HEALTH_PACK_COUNT
     packs = [HealthPack(x, y, random.Random(rng.getrandbits(64))) for x, y in spots[:n]]
@@ -403,21 +421,13 @@ def spawn_weapon_pickups(
     """Place weapon pickups in open cells, guaranteeing at least one of each type."""
     if used is None:
         used = set()
-    spots: list[tuple[float, float]] = []
-    for r in range(MAP_H):
-        for c in range(MAP_W):
-            if (
-                world.maze[r][c] == 0
-                and (c, r) not in used
-                and abs(c - 1) + abs(r - 1) > SPAWN_PICKUP_MIN_DIST
-            ):
-                spots.append((c + 0.5, r + 0.5))
+    spots = _supply_spots(world, used)
     rng.shuffle(spots)
     n = min(SPAWN_WEAPON_PICKUP_COUNT, len(spots))
     # Force one of each weapon type so the player can always find & unlock them.
-    types = [0, 1, 2, 3][:n]
+    types = list(PICKUP_WEAPONS[:n])
     while len(types) < n:
-        types.append(rng.randint(0, 3))
+        types.append(rng.choice(PICKUP_WEAPONS))
     rng.shuffle(types)
     packs = [
         WeaponPickup(x, y, t, random.Random(rng.getrandbits(64)))
