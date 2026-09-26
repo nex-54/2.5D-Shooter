@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import unittest
-from typing import cast
 
 import numpy as np
 import pygame
@@ -114,8 +113,7 @@ class FloorCeilingRenderingTests(unittest.TestCase):
         self.screen.fill((0, 0, 0))
         draw_floor_ceiling(self.world, self.screen, 1.5, 1.5, 0.0, textures)
         pixels: np.typing.NDArray[np.uint8] = pygame.surfarray.array3d(self.screen)
-        # Reducing RGB channels of a 3D array produces a 2D mask, not a scalar.
-        marked = cast(np.typing.NDArray[np.bool_], pixels.any(axis=2))
+        marked = pixels.any(axis=2)
         self.assertTrue(marked[WIDTH // 2].any())
         for x in (0, WIDTH // 4, WIDTH - 1):
             with self.subTest(column=x):
