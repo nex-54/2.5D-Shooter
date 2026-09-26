@@ -14,14 +14,11 @@ from shooter.constants import (
     SPAWN_ENEMY_MIN_DIST,
     SPAWN_HEALTH_PACK_COUNT,
     SPAWN_PICKUP_MIN_DIST,
-    SPAWN_REGULAR_COUNT,
-    SPAWN_SCOUT_COUNT,
-    SPAWN_SPIDER_COUNT,
     SPAWN_WEAPON_PICKUP_COUNT,
     Weapon,
 )
 from shooter.map import EXIT_TILE, FLOOR_TILE, MAP_H, MAP_W, LevelState, start_distance
-from shooter.types import Sfx
+from shooter.types import Sfx, SoundName
 
 
 def _blocks_enemy(world: LevelState, x: float, y: float) -> bool:
@@ -103,8 +100,8 @@ class Enemy:
     wander_timer_range = (1000, 3000)
     wall_wander_timer_range = (500, 1500)
     anim_speed = 0.008
-    attack_sound = "enemy_attack"
-    death_sound = "enemy_die"
+    attack_sound: SoundName = "enemy_attack"
+    death_sound: SoundName = "enemy_die"
     # Half the drawn body width (torso to arms) in world units, for hitscan.
     # Keep in step with sprite_scale, the drawn height relative to a wall.
     hit_radius = 0.25
@@ -332,29 +329,16 @@ PICKUP_WEAPONS = (Weapon.PISTOL, Weapon.SHOTGUN, Weapon.GATLING, Weapon.ROCKETS)
 def spawn_enemies(
     world: LevelState,
     rng: random.Random,
-    used: set[tuple[int, int]] | None = None,
-    regular_count: int | None = None,
-    scout_count: int | None = None,
-    spider_count: int | None = None,
-    boss_tile: tuple[int, int] | None = None,
+    used: set[tuple[int, int]],
+    *,
+    regular_count: int,
+    scout_count: int,
+    spider_count: int,
 ) -> list[Enemy]:
-    """Place enemies in open cells, away from player start.
+    """Place enemies in open cells away from the player's start.
 
-    Counts default to the SPAWN_*_COUNT constants. boss_tile is an (int_x, int_y)
-    pair excluded from spawn candidates; defaults to this level's boss spawn.
+    Tiles in used (such as the boss spawn) are skipped; tiles taken here are added.
     """
-    if used is None:
-        used = set()
-    if regular_count is None:
-        regular_count = SPAWN_REGULAR_COUNT
-    if scout_count is None:
-        scout_count = SPAWN_SCOUT_COUNT
-    if spider_count is None:
-        spider_count = SPAWN_SPIDER_COUNT
-    if boss_tile is None:
-        boss_tx, boss_ty = int(world.boss_spawn[0]), int(world.boss_spawn[1])
-    else:
-        boss_tx, boss_ty = boss_tile
     # Reject any spot that has line of sight to the player's spawn, so the
     # player sees no enemies when a new level loads.
     psx, psy = world.player_spawn
@@ -363,8 +347,6 @@ def spawn_enemies(
     for r in range(MAP_H):
         for c in range(MAP_W):
             if world.maze[r][c] != FLOOR_TILE or (c, r) in used:
-                continue
-            if c == boss_tx and r == boss_ty:
                 continue
             if start_distance(c, r) <= SPAWN_ENEMY_MIN_DIST:
                 continue

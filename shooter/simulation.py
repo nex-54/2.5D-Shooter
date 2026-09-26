@@ -26,6 +26,7 @@ from shooter.constants import (
     WEAPONS,
 )
 from shooter.map import BARRIER_CLEARANCE, BARRIER_TILE, DOOR_TILE, FLOOR_TILE
+from shooter.sound import FOOTSTEP_SOUNDS
 from shooter.state import GameState, check_win_lose
 from shooter.types import KeyState, Sfx
 
@@ -111,7 +112,7 @@ def update_player(
     if player_moved and state.on_ground:
         state.step_timer -= dt
         if state.step_timer <= 0:
-            sfx[f"step{state.step_index}"].play()
+            sfx[FOOTSTEP_SOUNDS[state.step_index]].play()
             state.step_index = 1 - state.step_index
             state.step_timer = FOOTSTEP_SPRINT_INTERVAL if sprinting else FOOTSTEP_WALK_INTERVAL
     state.game_time += dt * 0.001

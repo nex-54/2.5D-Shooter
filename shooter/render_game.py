@@ -20,10 +20,10 @@ from shooter.occlusion import DepthBuffer
 from shooter.raycaster import cast_rays
 from shooter.render_sprites import Billboard, Camera, draw_world_sprites
 from shooter.render_ui import draw_crosshair, draw_hud, draw_minimap
+from shooter.render_weapon import draw_weapon
 from shooter.render_world import draw_3d, draw_floor_ceiling
 from shooter.state import GameState
 from shooter.types import Textures
-from shooter.weapons import draw_weapon
 
 
 def draw_game_over(

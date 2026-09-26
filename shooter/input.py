@@ -9,6 +9,14 @@ from shooter.constants import MOUSE_SENSITIVITY, Weapon
 from shooter.state import GameState, reset_game
 from shooter.types import DoorAnim, Sfx
 
+_WEAPON_KEYS = {
+    pygame.K_1: Weapon.PISTOL,
+    pygame.K_2: Weapon.SHOTGUN,
+    pygame.K_3: Weapon.GATLING,
+    pygame.K_4: Weapon.ROCKETS,
+    pygame.K_0: Weapon.NUKE,
+}
+
 
 def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bool:
     """Process all pygame events. Returns False if the game should quit."""
@@ -32,15 +40,8 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
                 continue
             if event.scancode == pygame.KSCAN_R and state.game_over:
                 reset_game(state)
-            weapon_keys = {
-                pygame.K_1: Weapon.PISTOL,
-                pygame.K_2: Weapon.SHOTGUN,
-                pygame.K_3: Weapon.GATLING,
-                pygame.K_4: Weapon.ROCKETS,
-                pygame.K_0: Weapon.NUKE,
-            }
-            if event.key in weapon_keys and not state.game_over:
-                new_weapon = weapon_keys[event.key]
+            if event.key in _WEAPON_KEYS and not state.game_over:
+                new_weapon = _WEAPON_KEYS[event.key]
                 if state.owned[new_weapon]:
                     state.switch_weapon(new_weapon)
             if event.scancode == pygame.KSCAN_E and not state.game_over:

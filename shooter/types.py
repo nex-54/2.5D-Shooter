@@ -17,14 +17,34 @@ from numpy.typing import NDArray
 # ---------------------------------------------------------------------------
 # Sound effects
 # ---------------------------------------------------------------------------
+# Every effect sound.init_sounds() synthesizes, so misspelled names fail type checks.
+SoundName = Literal[
+    # weapons
+    "pistol",
+    "shotgun",
+    "gatling",
+    "rocket_fire",
+    "explosion",
+    "empty",
+    # player
+    "step0",
+    "step1",
+    "pickup",
+    # world
+    "door_open",
+    "door_close",
+    "music",
+    # enemies
+    "enemy_hurt",
+    "enemy_die",
+    "enemy_attack",
+    "boss_roar",
+    "boss_die",
+    "spider_hiss",
+    "spider_die",
+]
 # Mapping of SFX name -> loaded pygame Sound, built by sound.init_sounds().
-# Canonical keys (see sound.init_sounds):
-#   weapons:  'pistol', 'shotgun', 'gatling', 'rocket_fire', 'explosion', 'empty'
-#   player:   'step0', 'step1', 'pickup'
-#   world:    'door_open', 'door_close', 'music'
-#   enemies:  'enemy_hurt', 'enemy_die', 'enemy_attack',
-#             'boss_roar', 'boss_die', 'spider_hiss', 'spider_die'
-Sfx = dict[str, pygame.mixer.Sound]
+Sfx = dict[SoundName, pygame.mixer.Sound]
 
 
 # ---------------------------------------------------------------------------

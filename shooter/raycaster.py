@@ -5,13 +5,11 @@ Raycasting engine — casts rays from the player's position to build the wall co
 from __future__ import annotations
 
 import math
-from typing import Callable
+from collections.abc import Callable
 
 from shooter.constants import FOV, HALF_FOV, MAX_DEPTH, NUM_RAYS
 from shooter.map import BARRIER_TILE, DOOR_TILE, LevelState
 from shooter.types import BgHit, DoorAnimMap, WallColumn
-
-__all__ = ["BgHit", "WallColumn", "cast_rays"]
 
 
 def _cast_single(

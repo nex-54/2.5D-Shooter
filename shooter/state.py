@@ -9,6 +9,7 @@ from shooter.constants import (
     INITIAL_AMMO,
     LEVEL_BANNER_DURATION,
     PLAYER_MAX_HP,
+    SPAWN_GRACE_DURATION,
     SPAWN_REGULAR_COUNT,
     SPAWN_SCOUT_COUNT,
     SPAWN_SPIDER_COUNT,
@@ -34,7 +35,8 @@ class GameState:
 
     Lifecycle:
         GameState()           -- construct (calls reset())
-        start_level(s, n)     -- generate level n, spawn entities, refill HP
+        s.enter_level(w, n)   -- move into world w as level n, clearing per-level state
+        start_level(s, n)     -- generate level n, enter it, and spawn entities
         reset_game(s)         -- full reset + start_level(1) after death
 
     Field groups:
@@ -94,38 +96,43 @@ class GameState:
         """Set every field to its starting value. Does NOT generate a level."""
         self.level_rng = random.Random(self.seed)
         self.rng = random.Random(self.seed)
-        self.world = LevelState()
+
+        # Weapons carry over between levels.
+        self.weapon: Weapon = Weapon.PISTOL
+        self.ammo: list[int] = list(INITIAL_AMMO)
+        self.owned = [weapon.initially_owned for weapon in WEAPONS]
+
+        self.step_index = 0
+        self.game_time = 0.0
+        self.game_over = False
+        self.paused = False
+        self.enter_level(LevelState(), 1)
+
+    def enter_level(self, world: LevelState, level: int) -> None:
+        """Stand the player in world as level number level, with per-level state cleared.
+
+        Entity lists start empty; start_level spawns them.
+        """
+        self.world = world
+        self.level = level
 
         # Player position & physics
         self.spawn_player()
 
         # Player combat
-        self.hp = PLAYER_MAX_HP
+        self.hp = PLAYER_MAX_HP  # refill health on each new level
         self.damage_cooldown = 0
-        self.kills = 0
+        self.kills = 0  # per-level kill counter so HUD "X/Y" stays meaningful
 
-        # Weapons
-        self.weapon: Weapon = Weapon.PISTOL
-        self.ammo: list[int] = list(INITIAL_AMMO)
-        self.owned = [weapon.initially_owned for weapon in WEAPONS]
+        # Weapon activity (the arsenal itself carries over)
         self.shooting = False
         self.shoot_timer = 0
         self.mouse_held = False
         self.gatling_spin = 0.0
         self.gatling_speed = 0.0
 
-        # Footsteps
         self.step_timer = 0
-        self.step_index = 0
-
-        # World
-        self.game_time = 0.0
-        self.game_over = False
-        self.paused = False
         self.door_anim: DoorAnimMap = {}
-
-        # Level progression
-        self.level = 1
         self.level_banner_timer = 0
         self.spawn_grace = 0
 
@@ -169,15 +176,7 @@ def start_level(state: GameState, level: int) -> None:
     Preserves ammo and owned/equipped weapons; refills HP and resets level kills.
     Enemy counts scale modestly with level number.
     """
-    state.world = gmap.generate_level(level, state.level_rng)
-
-    # Reposition player to the fresh spawn and clear per-level transient state.
-    state.spawn_player()
-    state.door_anim = {}
-    state.damage_cooldown = 0
-    state.shoot_timer = 0
-    state.shooting = False
-    state.mouse_held = False
+    state.enter_level(gmap.generate_level(level, state.level_rng), level)
 
     # Difficulty scaling: +1 of each enemy type per level.
     bonus = level - 1
@@ -193,21 +192,13 @@ def start_level(state: GameState, level: int) -> None:
         regular_count=SPAWN_REGULAR_COUNT + bonus,
         scout_count=SPAWN_SCOUT_COUNT + bonus,
         spider_count=SPAWN_SPIDER_COUNT + bonus,
-        boss_tile=boss_tile,
     )
     state.boss = Boss(*state.world.boss_spawn, random.Random(state.level_rng.getrandbits(64)))
     state.enemies.append(state.boss)
     state.total_enemies = len(state.enemies)
-    state.rockets = []
-    state.gatling_spin = 0.0
-    state.gatling_speed = 0.0
-    state.step_timer = 0
 
-    state.hp = PLAYER_MAX_HP  # refill health on each new level
-    state.level = level
     state.level_banner_timer = LEVEL_BANNER_DURATION
-    state.spawn_grace = 2000  # ms — no enemy damage while player gets oriented
-    state.kills = 0  # per-level kill counter so HUD "X/Y" stays meaningful
+    state.spawn_grace = SPAWN_GRACE_DURATION
 
 
 def reset_game(state: GameState) -> None:

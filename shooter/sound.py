@@ -12,7 +12,10 @@ from collections.abc import Callable
 import pygame
 
 from shooter.constants import SAMPLE_RATE
-from shooter.types import Sfx
+from shooter.types import Sfx, SoundName
+
+# Footsteps alternate between these two slightly different thuds.
+FOOTSTEP_SOUNDS: tuple[SoundName, SoundName] = ("step0", "step1")
 
 
 def _make_sound(samples: list[float]) -> pygame.mixer.Sound:
@@ -75,13 +78,13 @@ def init_sounds() -> Sfx:
     sounds: Sfx = {}
 
     # --- Footsteps (2 alternating) ---
-    for j in range(2):
+    for j, name in enumerate(FOOTSTEP_SOUNDS):
         s = _synth_noise(0.08, volume=0.12, decay=True)
         for i in range(len(s)):
             t = i / SAMPLE_RATE
             env = 1 - i / len(s)
             s[i] += math.sin(2 * math.pi * (60 + j * 10) * t) * 0.15 * env * 32767
-        sounds[f"step{j}"] = _make_sound(s)
+        sounds[name] = _make_sound(s)
 
     # --- Pistol shot ---
     s = _synth_noise(0.15, volume=0.5, decay=True)

@@ -1,15 +1,20 @@
 """
-First-person weapon rendering — draws the pistol, gatling gun, and shotgun viewmodels.
+First-person weapon rendering — draws the pistol, shotgun, gatling gun, rocket launcher,
+and nuke detonator viewmodels.
 """
 
 from __future__ import annotations
 
 import math
 import random
+from collections.abc import Sequence
 
 import pygame
 
 from shooter.constants import HEIGHT, WEAPONS, WIDTH, Weapon
+
+# One filled circle of a glow: RGBA color and radius in pixels.
+_Ring = tuple[tuple[int, int, int, int], int]
 
 
 def _cooldown(weapon: Weapon, shoot_timer: int) -> float:
@@ -17,7 +22,54 @@ def _cooldown(weapon: Weapon, shoot_timer: int) -> float:
     return shoot_timer / WEAPONS[weapon].fire_interval_ms
 
 
-def draw_gatling(
+def _bob(
+    game_time: float,
+    moving: bool,
+    walk: tuple[float, float, float, float],
+    idle: tuple[float, float, float, float],
+) -> tuple[int, int]:
+    """Screen offset of the swaying weapon.
+
+    walk and idle are (x frequency, x amplitude, y frequency, y amplitude).
+    Walking bounces the weapon, so its vertical wave is rectified.
+    """
+    freq_x, amp_x, freq_y, amp_y = walk if moving else idle
+    wave_y = math.sin(game_time * freq_y)
+    if moving:
+        wave_y = abs(wave_y)
+    return int(math.sin(game_time * freq_x) * amp_x), int(wave_y * amp_y)
+
+
+def _glow(screen: pygame.Surface, x: int, y: int, rings: Sequence[_Ring]) -> None:
+    """Blend translucent circles centred on (x, y), each painted over the last."""
+    half = max(radius for _, radius in rings) + 1
+    surf = pygame.Surface((half * 2, half * 2), pygame.SRCALPHA)
+    for color, radius in rings:
+        pygame.draw.circle(surf, color, (half, half), radius)
+    screen.blit(surf, (x - half, y - half))
+
+
+def _muzzle_flash(
+    screen: pygame.Surface,
+    x: int,
+    y: int,
+    rings: Sequence[_Ring],
+    game_time: float,
+    *,
+    ray_step: int,
+    ray_len: int,
+    ray_spin: float,
+    ray_color: tuple[int, int, int],
+) -> None:
+    """Glow at (x, y) with a ray every ray_step degrees, turning ray_spin degrees a second."""
+    _glow(screen, x, y, rings)
+    for angle in range(0, 360, ray_step):
+        rad = math.radians(angle + game_time * ray_spin)
+        end = (x + int(math.cos(rad) * ray_len), y + int(math.sin(rad) * ray_len))
+        pygame.draw.line(screen, ray_color, (x, y), end, 2)
+
+
+def _draw_gatling(
     screen: pygame.Surface,
     shooting: bool,
     shoot_timer: int,
@@ -30,12 +82,7 @@ def draw_gatling(
     by = HEIGHT + 30
 
     # --- Animation offsets ---
-    if player_moving:
-        bob_x = int(math.sin(game_time * 5) * 5)
-        bob_y = int(abs(math.sin(game_time * 10)) * 4)
-    else:
-        bob_x = int(math.sin(game_time * 1.2) * 2)
-        bob_y = int(math.sin(game_time * 1.8) * 2)
+    bob_x, bob_y = _bob(game_time, player_moving, walk=(5, 5, 10, 4), idle=(1.2, 2, 1.8, 2))
 
     recoil_x = 0
     recoil_y = 0
@@ -118,33 +165,26 @@ def draw_gatling(
 
     # --- Muzzle flash ---
     if shooting and _cooldown(Weapon.GATLING, shoot_timer) > 0.5:
-        flash_x = barrel_cx
-        flash_y = barrel_cy - barrel_len - 20
-        flash_surf = pygame.Surface((120, 120), pygame.SRCALPHA)
-        pygame.draw.circle(flash_surf, (255, 180, 30, 80), (60, 60), 50)
-        pygame.draw.circle(flash_surf, (255, 220, 80, 140), (60, 60), 30)
-        pygame.draw.circle(flash_surf, (255, 255, 200, 200), (60, 60), 12)
-        screen.blit(flash_surf, (flash_x - 60, flash_y - 60))
-        for a in range(0, 360, 30):
-            rad = math.radians(a + game_time * 800)
-            ex = flash_x + int(math.cos(rad) * 40)
-            ey = flash_y + int(math.sin(rad) * 40)
-            pygame.draw.line(screen, (255, 240, 100), (flash_x, flash_y), (ex, ey), 2)
+        _muzzle_flash(
+            screen,
+            barrel_cx,
+            barrel_cy - barrel_len - 20,
+            [((255, 180, 30, 80), 50), ((255, 220, 80, 140), 30), ((255, 255, 200, 200), 12)],
+            game_time,
+            ray_step=30,
+            ray_len=40,
+            ray_spin=800,
+            ray_color=(255, 240, 100),
+        )
 
 
-def draw_shotgun(
+def _draw_shotgun(
     screen: pygame.Surface, shooting: bool, shoot_timer: int, player_moving: bool, game_time: float
 ) -> None:
     """Draw a pump-action shotgun."""
     cx = WIDTH // 2 + 80
     by = HEIGHT + 30
-
-    if player_moving:
-        bob_x = int(math.sin(game_time * 6) * 6)
-        bob_y = int(abs(math.sin(game_time * 12)) * 5)
-    else:
-        bob_x = int(math.sin(game_time * 1.3) * 2)
-        bob_y = int(math.sin(game_time * 1.8) * 2)
+    bob_x, bob_y = _bob(game_time, player_moving, walk=(6, 6, 12, 5), idle=(1.3, 2, 1.8, 2))
 
     recoil_y = 0
     pump_offset = 0
@@ -220,18 +260,17 @@ def draw_shotgun(
 
     # --- Muzzle flash ---
     if shooting and t > 0.75:
-        flash_x = barrel_l + barrel_w // 2
-        flash_y = barrel_t - 20
-        flash_surf = pygame.Surface((140, 140), pygame.SRCALPHA)
-        pygame.draw.circle(flash_surf, (255, 180, 30, 90), (70, 70), 60)
-        pygame.draw.circle(flash_surf, (255, 220, 80, 150), (70, 70), 35)
-        pygame.draw.circle(flash_surf, (255, 255, 200, 220), (70, 70), 14)
-        screen.blit(flash_surf, (flash_x - 70, flash_y - 70))
-        for a in range(0, 360, 25):
-            rad = math.radians(a + game_time * 600)
-            ex = flash_x + int(math.cos(rad) * 50)
-            ey = flash_y + int(math.sin(rad) * 50)
-            pygame.draw.line(screen, (255, 230, 120), (flash_x, flash_y), (ex, ey), 2)
+        _muzzle_flash(
+            screen,
+            barrel_l + barrel_w // 2,
+            barrel_t - 20,
+            [((255, 180, 30, 90), 60), ((255, 220, 80, 150), 35), ((255, 255, 200, 220), 14)],
+            game_time,
+            ray_step=25,
+            ray_len=50,
+            ray_spin=600,
+            ray_color=(255, 230, 120),
+        )
 
 
 def _draw_pistol(
@@ -240,13 +279,7 @@ def _draw_pistol(
     """Draw the pistol viewmodel."""
     cx = WIDTH // 2 + 120
     by = HEIGHT + 20
-
-    if player_moving:
-        bob_x = int(math.sin(game_time * 7) * 8)
-        bob_y = int(abs(math.sin(game_time * 14)) * 6)
-    else:
-        bob_x = int(math.sin(game_time * 1.5) * 3)
-        bob_y = int(math.sin(game_time * 2) * 2)
+    bob_x, bob_y = _bob(game_time, player_moving, walk=(7, 8, 14, 6), idle=(1.5, 3, 2, 2))
 
     recoil_y = 0
     t = _cooldown(Weapon.PISTOL, shoot_timer)
@@ -321,18 +354,17 @@ def _draw_pistol(
 
     # --- Muzzle flash ---
     if shooting and t > 0.75:
-        flash_x = barrel_x + 7
-        flash_y = barrel_t - 15
-        flash_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
-        pygame.draw.circle(flash_surf, (255, 200, 50, 100), (40, 40), 35)
-        pygame.draw.circle(flash_surf, (255, 230, 100, 160), (40, 40), 20)
-        pygame.draw.circle(flash_surf, (255, 255, 220, 220), (40, 40), 10)
-        screen.blit(flash_surf, (flash_x - 40, flash_y - 40))
-        for angle in range(0, 360, 45):
-            rad = math.radians(angle + game_time * 500)
-            ex = flash_x + int(math.cos(rad) * 28)
-            ey = flash_y + int(math.sin(rad) * 28)
-            pygame.draw.line(screen, (255, 240, 150), (flash_x, flash_y), (ex, ey), 2)
+        _muzzle_flash(
+            screen,
+            barrel_x + 7,
+            barrel_t - 15,
+            [((255, 200, 50, 100), 35), ((255, 230, 100, 160), 20), ((255, 255, 220, 220), 10)],
+            game_time,
+            ray_step=45,
+            ray_len=28,
+            ray_spin=500,
+            ray_color=(255, 240, 150),
+        )
 
 
 def _draw_rocket_launcher(
@@ -341,13 +373,7 @@ def _draw_rocket_launcher(
     """Draw a shoulder-fired rocket launcher viewmodel, tube pointing forward (up on screen)."""
     cx = WIDTH // 2 + 90
     by = HEIGHT + 30
-
-    if player_moving:
-        bob_x = int(math.sin(game_time * 4) * 5)
-        bob_y = int(abs(math.sin(game_time * 8)) * 5)
-    else:
-        bob_x = int(math.sin(game_time * 1.1) * 2)
-        bob_y = int(math.sin(game_time * 1.5) * 2)
+    bob_x, bob_y = _bob(game_time, player_moving, walk=(4, 5, 8, 5), idle=(1.1, 2, 1.5, 2))
 
     # Recoil kicks the tube downward briefly after firing.
     recoil_y = 0
@@ -510,25 +536,24 @@ def _draw_rocket_launcher(
 
     # --- Muzzle flash + backblast on fire ---
     if shooting and t > 0.75:
-        flash_cx = tube_l + tube_w // 2
-        flash_cy = muzzle_t - 10
-        flash_surf = pygame.Surface((220, 220), pygame.SRCALPHA)
-        pygame.draw.circle(flash_surf, (255, 140, 40, 120), (110, 110), 95)
-        pygame.draw.circle(flash_surf, (255, 200, 80, 180), (110, 110), 60)
-        pygame.draw.circle(flash_surf, (255, 240, 180, 220), (110, 110), 26)
-        screen.blit(flash_surf, (flash_cx - 110, flash_cy - 110))
-        for a in range(0, 360, 30):
-            rad = math.radians(a + game_time * 700)
-            ex = flash_cx + int(math.cos(rad) * 60)
-            ey = flash_cy + int(math.sin(rad) * 60)
-            pygame.draw.line(screen, (255, 220, 120), (flash_cx, flash_cy), (ex, ey), 2)
+        _muzzle_flash(
+            screen,
+            tube_l + tube_w // 2,
+            muzzle_t - 10,
+            [((255, 140, 40, 120), 95), ((255, 200, 80, 180), 60), ((255, 240, 180, 220), 26)],
+            game_time,
+            ray_step=30,
+            ray_len=60,
+            ray_spin=700,
+            ray_color=(255, 220, 120),
+        )
         # Backblast puff out of the rear vent
-        back_cx = tube_l + tube_w // 2
-        back_cy = rear_top + 60
-        back_surf = pygame.Surface((180, 180), pygame.SRCALPHA)
-        pygame.draw.circle(back_surf, (210, 210, 210, 120), (90, 90), 75)
-        pygame.draw.circle(back_surf, (240, 200, 140, 180), (90, 90), 40)
-        screen.blit(back_surf, (back_cx - 90, back_cy - 90))
+        _glow(
+            screen,
+            tube_l + tube_w // 2,
+            rear_top + 60,
+            [((210, 210, 210, 120), 75), ((240, 200, 140, 180), 40)],
+        )
 
 
 def _draw_nuke_detonator(
@@ -537,13 +562,7 @@ def _draw_nuke_detonator(
     """Draw a handheld detonator box with a big red button."""
     cx = WIDTH // 2 + 90
     by = HEIGHT + 30
-
-    if player_moving:
-        bob_x = int(math.sin(game_time * 5) * 4)
-        bob_y = int(abs(math.sin(game_time * 10)) * 4)
-    else:
-        bob_x = int(math.sin(game_time * 1.2) * 2)
-        bob_y = int(math.sin(game_time * 1.6) * 2)
+    bob_x, bob_y = _bob(game_time, player_moving, walk=(5, 4, 10, 4), idle=(1.2, 2, 1.6, 2))
 
     pressed = shooting and shoot_timer > 0
     press_off = 6 if pressed else 0
@@ -592,10 +611,7 @@ def _draw_nuke_detonator(
         )
 
     if shooting and _cooldown(Weapon.NUKE, shoot_timer) > 0.75:
-        glow = pygame.Surface((120, 120), pygame.SRCALPHA)
-        pygame.draw.circle(glow, (255, 80, 80, 120), (60, 60), 55)
-        pygame.draw.circle(glow, (255, 200, 200, 200), (60, 60), 25)
-        screen.blit(glow, (btn_cx - 60, btn_cy - 60))
+        _glow(screen, btn_cx, btn_cy, [((255, 80, 80, 120), 55), ((255, 200, 200, 200), 25)])
 
 
 def draw_weapon(
@@ -609,9 +625,9 @@ def draw_weapon(
 ) -> None:
     """Draw the current weapon viewmodel."""
     if weapon == Weapon.SHOTGUN:
-        draw_shotgun(screen, shooting, shoot_timer, player_moving, game_time)
+        _draw_shotgun(screen, shooting, shoot_timer, player_moving, game_time)
     elif weapon == Weapon.GATLING:
-        draw_gatling(screen, shooting, shoot_timer, player_moving, game_time, gatling_spin)
+        _draw_gatling(screen, shooting, shoot_timer, player_moving, game_time, gatling_spin)
     elif weapon == Weapon.ROCKETS:
         _draw_rocket_launcher(screen, shooting, shoot_timer, player_moving, game_time)
     elif weapon == Weapon.NUKE:

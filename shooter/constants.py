@@ -90,16 +90,17 @@ class WeaponDefinition:
     ammo_pool: int
     fire_interval_ms: int
     pickup_ammo: int
+    color: tuple[int, int, int]  # pickup halo and minimap marker
     initially_owned: bool = False
 
 
 # Indexed by Weapon. Pistol and gatling share ammo pool 0.
 WEAPONS = (
-    WeaponDefinition("Pistol", 0, 200, 15, True),
-    WeaponDefinition("Shotgun", 1, 600, 8),
-    WeaponDefinition("Gatling", 0, 60, 100),
-    WeaponDefinition("Rockets", 2, 800, 5),
-    WeaponDefinition("Nuke", 3, 1200, 0, True),
+    WeaponDefinition("Pistol", 0, 200, 15, (230, 200, 70), True),  # brassy yellow
+    WeaponDefinition("Shotgun", 1, 600, 8, (220, 60, 40)),  # red
+    WeaponDefinition("Gatling", 0, 60, 100, (180, 180, 200)),  # cold steel
+    WeaponDefinition("Rockets", 2, 800, 5, (255, 120, 40)),  # orange
+    WeaponDefinition("Nuke", 3, 1200, 0, (200, 40, 40), True),  # detonator button
 )
 INITIAL_AMMO = (50, 0, 0, 1)
 MAX_AMMO = (999, 50, 30, 1)
@@ -131,6 +132,7 @@ DOOR_OPEN_DURATION = 5000  # ms before a door auto-closes
 DOOR_RETRY_DELAY = 500  # ms to retry closing an occupied door
 DOOR_ANIM_DURATION = 400  # ms for a door to slide open or closed
 LEVEL_BANNER_DURATION = 1200  # ms the "LEVEL N" banner stays up
+SPAWN_GRACE_DURATION = 2000  # ms without enemy damage while the player gets oriented
 
 # ---------------------------------------------------------------------------
 # Spawning

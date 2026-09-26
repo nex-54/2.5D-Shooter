@@ -25,7 +25,7 @@ def _add_noise(surf: pygame.Surface, amount: int = 15) -> None:
 
 
 def generate_textures() -> Textures:
-    """Procedurally generate all game textures. Returns a dict (see shooter.types.Textures)."""
+    """Procedurally generate all game textures (see shooter.types.Textures)."""
     tex = Textures()
 
     # --- Wall: brick pattern ---

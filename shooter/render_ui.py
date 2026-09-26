@@ -20,6 +20,7 @@ from shooter.constants import (
     MINIMAP_SCALE,
     PLAYER_MAX_HP,
     RED,
+    WEAPONS,
     WHITE,
     WIDTH,
     YELLOW,
@@ -97,12 +98,11 @@ def draw_minimap(
             pygame.draw.rect(screen, WHITE, (hx - 1, hy - 3, 2, 6))
             pygame.draw.rect(screen, WHITE, (hx - 3, hy - 1, 6, 2))
 
-    gun_map_colors = [(200, 180, 60), (180, 60, 50), (120, 120, 140), (240, 130, 50)]
     for pack in weapon_pickups:
         if pack.active:
             ax = int(mx + pack.x * MINIMAP_SCALE)
             ay = int(my + pack.y * MINIMAP_SCALE)
-            col = gun_map_colors[pack.weapon_type]
+            col = WEAPONS[pack.weapon_type].color
             # Simple gun silhouette: horizontal barrel + a small grip below.
             pygame.draw.rect(screen, col, (ax - 2, ay - 1, 5, 2))
             pygame.draw.rect(screen, col, (ax, ay + 1, 2, 2))

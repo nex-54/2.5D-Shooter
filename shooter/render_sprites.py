@@ -21,6 +21,7 @@ from shooter.constants import (
     HALF_FOV,
     HEIGHT,
     MAX_DEPTH,
+    WEAPONS,
     WHITE,
     WIDTH,
     Weapon,
@@ -620,14 +621,6 @@ def draw_health_pack(
         )
 
 
-_PICKUP_HALO_COLORS = (
-    (230, 200, 70),  # pistol  — brassy yellow
-    (220, 60, 40),  # shotgun — red
-    (180, 180, 200),  # gatling — cold steel
-    (255, 120, 40),  # rockets — orange
-)
-
-
 def draw_weapon_pickup(
     screen: pygame.Surface, pack: WeaponPickup, camera: Camera, z_buffer: DepthBuffer
 ) -> None:
@@ -644,7 +637,7 @@ def draw_weapon_pickup(
     shade = max(0.4, min(1.0, 1.0 - (corrected - 1) / MAX_DEPTH))
 
     # Color-coded pulsing halo so weapon type reads at any distance.
-    base = _PICKUP_HALO_COLORS[pack.weapon_type]
+    base = WEAPONS[pack.weapon_type].color
     pulse = abs(math.sin(pack.anim_time * 2))
     halo_r = int(size * (1.0 + pulse * 0.25))
     bounds = pygame.Rect(screen_x - halo_r, cy - halo_r, halo_r * 2, halo_r * 2)
