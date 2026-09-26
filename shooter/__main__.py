@@ -1,3 +1,3 @@
-from shooter.game import main
+from shooter.app import main
 
 main()

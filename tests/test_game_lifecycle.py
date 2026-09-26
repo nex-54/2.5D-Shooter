@@ -7,8 +7,10 @@ import pygame
 
 from shooter.constants import INITIAL_AMMO, WEAPONS
 from shooter.entities import Boss, Enemy, HealthPack, Rocket
-from shooter.game import GameState, handle_events, reset_game, start_level, update_game
+from shooter.input import handle_events
 from shooter.map import DOOR_TILE
+from shooter.simulation import update_game
+from shooter.state import GameState, reset_game, start_level
 from shooter.types import DoorAnim
 from tests.support import Keys, SoundMocks, open_world
 
@@ -128,7 +130,7 @@ class GameLifecycleTests(unittest.TestCase):
         self.state.weapon = 3
         self.state.rockets = [Rocket(3.5, 1.5, 0)]
         restart = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r, scancode=pygame.KSCAN_R)
-        with patch("shooter.game.pygame.event.get", return_value=[restart]):
+        with patch("shooter.input.pygame.event.get", return_value=[restart]):
             self.assertTrue(handle_events(self.state, self.sfx, set()))
         self.assertFalse(self.state.game_over)
         self.assertEqual(self.state.hp, 100)

@@ -7,8 +7,9 @@ import unittest
 from unittest.mock import MagicMock
 
 from shooter import map as gmap
+from shooter.combat import update_rockets
 from shooter.entities import Enemy, Rocket, hitscan
-from shooter.game import GameState, update_rockets
+from shooter.state import GameState
 from tests.support import open_world
 
 

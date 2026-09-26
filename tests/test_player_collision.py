@@ -11,7 +11,8 @@ import pygame
 from shooter import map as gmap
 from shooter.constants import PLAYER_MARGIN
 from shooter.entities import Boss
-from shooter.game import GameState, check_win_lose, update_doors, update_player
+from shooter.simulation import update_doors, update_player
+from shooter.state import GameState, check_win_lose
 from shooter.types import DoorAnim
 from tests.support import open_world
 
@@ -55,7 +56,7 @@ class PlayerCollisionTests(unittest.TestCase):
         self.state.px, self.state.py, self.state.pa = exit_x - 2.5, 5.5, 0.0
         self.walk(60)
         self.assertAlmostEqual(self.state.px, exit_x - PLAYER_MARGIN, places=5)
-        with patch("shooter.game.start_level") as start_level:
+        with patch("shooter.state.start_level") as start_level:
             check_win_lose(self.state)
             start_level.assert_not_called()
 

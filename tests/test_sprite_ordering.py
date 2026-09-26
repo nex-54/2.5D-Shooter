@@ -11,9 +11,10 @@ import pygame.freetype
 
 from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH
 from shooter.entities import Boss, Enemy, HealthPack, Rocket, WeaponPickup
-from shooter.game import GameState, draw_frame
 from shooter.occlusion import DepthBuffer
+from shooter.render_game import draw_frame
 from shooter.render_sprites import Billboard, draw_enemies, draw_world_sprites
+from shooter.state import GameState
 from shooter.textures import generate_textures
 from tests.support import open_world
 

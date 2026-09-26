@@ -5,9 +5,12 @@ from unittest.mock import patch
 
 import pygame
 
+from shooter.combat import update_combat
 from shooter.constants import MAX_AMMO, WEAPONS
 from shooter.entities import Boss, Enemy, WeaponPickup
-from shooter.game import GameState, handle_events, update_combat, update_pickups
+from shooter.input import handle_events
+from shooter.simulation import update_pickups
+from shooter.state import GameState
 from tests.support import SoundMocks, open_world
 
 
@@ -20,7 +23,7 @@ class WeaponRulesTests(unittest.TestCase):
 
     def fire(self) -> None:
         event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1)
-        with patch("shooter.game.pygame.event.get", return_value=[event]):
+        with patch("shooter.input.pygame.event.get", return_value=[event]):
             handle_events(self.state, self.sounds.sfx, set())
         if self.state.weapon == 2:
             update_combat(self.state, 0, self.sounds.sfx)
@@ -64,7 +67,7 @@ class WeaponRulesTests(unittest.TestCase):
         self.fire()
         self.state.owned[2] = True
         switch = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_3, scancode=pygame.KSCAN_3)
-        with patch("shooter.game.pygame.event.get", return_value=[switch]):
+        with patch("shooter.input.pygame.event.get", return_value=[switch]):
             handle_events(self.state, self.sounds.sfx, set())
         self.fire()
         self.assertEqual(self.state.ammo[0], 8)

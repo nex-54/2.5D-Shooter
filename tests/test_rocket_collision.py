@@ -6,10 +6,12 @@ from unittest.mock import patch
 
 import pygame
 
+from shooter.combat import update_rockets
 from shooter.constants import WEAPONS
 from shooter.entities import Enemy, Rocket
-from shooter.game import GameState, handle_events, update_rockets
+from shooter.input import handle_events
 from shooter.map import BARRIER_TILE, DOOR_TILE
+from shooter.state import GameState
 from tests.support import SoundMocks, open_world
 
 
@@ -66,7 +68,7 @@ class RocketCollisionTests(unittest.TestCase):
         self.state.owned[3] = True
         self.state.ammo[WEAPONS[3].ammo_pool] = 1
         click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1)
-        with patch("shooter.game.pygame.event.get", return_value=[click]):
+        with patch("shooter.input.pygame.event.get", return_value=[click]):
             handle_events(self.state, self.sfx, set())
         rocket = self.state.rockets[0]
         self.assertTrue(rocket.exploded)

@@ -6,8 +6,9 @@ from collections import deque
 from unittest.mock import MagicMock
 
 from shooter.constants import SPAWN_HEALTH_PACK_COUNT, SPAWN_WEAPON_PICKUP_COUNT
-from shooter.game import GameState, start_level, update_doors
 from shooter.map import DOOR_TILE, MAP_H, MAP_W
+from shooter.simulation import update_doors
+from shooter.state import GameState, start_level
 from shooter.textures import generate_textures
 from shooter.types import DoorAnim
 

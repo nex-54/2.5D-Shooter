@@ -6,8 +6,9 @@ import math
 import unittest
 from unittest.mock import MagicMock
 
+from shooter.combat import update_combat
 from shooter.entities import Boss, Enemy, Scout, Spider, apply_hit, hitscan
-from shooter.game import GameState, update_combat
+from shooter.state import GameState
 from tests.support import SoundMocks, open_world
 
 

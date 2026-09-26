@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 import pygame
 
 from shooter.constants import WEAPONS
-from shooter.game import GameState, handle_events
+from shooter.input import handle_events
+from shooter.state import GameState
 
 
 def key(key_code: int, scancode: int = 0) -> pygame.event.Event:
@@ -22,7 +23,7 @@ class PauseTests(unittest.TestCase):
 
     def send(self, *events: pygame.event.Event) -> bool:
         """Deliver events through handle_events; returns False when the game quits."""
-        with patch("shooter.game.pygame.event.get", return_value=list(events)):
+        with patch("shooter.input.pygame.event.get", return_value=list(events)):
             return handle_events(self.state, MagicMock(), self.pressed)
 
     def test_escape_toggles_pause_instead_of_quitting(self) -> None:
