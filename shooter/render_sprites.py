@@ -725,21 +725,25 @@ def draw_weapon_pickups(
             target, origin_x, origin_y = layer
             screen_x -= origin_x
             cy -= origin_y
-            halo_surf = pygame.Surface((halo_r * 2, halo_r * 2), pygame.SRCALPHA)
+            # Close pickups can project far beyond the viewport. Keep the
+            # original circle geometry, but allocate only its visible region.
+            visible_bounds = bounds.move(-origin_x, -origin_y).clip(target.get_clip())
+            center = (screen_x - visible_bounds.x, cy - visible_bounds.y)
+            halo_surf = pygame.Surface(visible_bounds.size, pygame.SRCALPHA)
             pygame.draw.circle(
                 halo_surf,
                 (base[0], base[1], base[2], int(110 + pulse * 50)),
-                (halo_r, halo_r),
+                center,
                 halo_r,
             )
             pygame.draw.circle(
                 halo_surf,
                 (base[0], base[1], base[2], int(60 + pulse * 40)),
-                (halo_r, halo_r),
+                center,
                 halo_r,
                 max(1, halo_r // 8),
             )
-            target.blit(halo_surf, (screen_x - halo_r, cy - halo_r))
+            target.blit(halo_surf, visible_bounds.topleft)
 
             if pack.weapon_type == 0:
                 _draw_pistol_icon(target, screen_x, cy, size, shade)
