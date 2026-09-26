@@ -20,6 +20,8 @@ _WEAPON_KEYS = {
 
 def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bool:
     """Process all pygame events. Returns False if the game should quit."""
+    # event.get() drains a whole batch before the main loop can recapture the mouse.
+    ignore_mouse_motion = state.paused
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             return False
@@ -29,6 +31,7 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
                 # Esc pauses; the game-over screen has nothing to pause.
                 if state.game_over:
                     return False
+                ignore_mouse_motion = True
                 if state.paused:
                     state.paused = False
                 else:
@@ -58,8 +61,9 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
         elif event.type == pygame.WINDOWFOCUSLOST:
             if not state.game_over:
                 _pause(state, pressed_scancodes)
+                ignore_mouse_motion = True
         elif event.type == pygame.MOUSEMOTION:
-            if not state.game_over and not state.paused:
+            if not state.game_over and not state.paused and not ignore_mouse_motion:
                 state.pa += event.rel[0] * MOUSE_SENSITIVITY
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1 and state.paused:

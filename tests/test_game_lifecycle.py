@@ -62,6 +62,7 @@ class GameLifecycleTests(unittest.TestCase):
                 state = GameState(seed=0)
                 state.world = open_world()
                 setattr(state, status, True)
+                state.shoot_timer = 200
                 state.weapon = Weapon.GATLING
                 state.owned[Weapon.GATLING] = True
                 state.mouse_held = True
@@ -78,6 +79,7 @@ class GameLifecycleTests(unittest.TestCase):
                 self.assertEqual(state.game_time, 0)
                 self.assertEqual(state.ammo, ammo)
                 self.assertEqual(state.shoot_timer, 100)
+                self.assertEqual(state.weapon_cooldowns[Weapon.PISTOL], 200)
                 self.assertEqual(state.spawn_grace, 1000)
                 self.assertEqual(state.enemies[0].x, 2.2)
                 self.assertEqual(state.rockets[0].x, 3.5)
@@ -93,6 +95,7 @@ class GameLifecycleTests(unittest.TestCase):
         self.state.owned[Weapon.SHOTGUN] = True
         self.state.weapon = Weapon.SHOTGUN
         self.state.ammo = [17, 6, 2, 0]
+        self.state.weapon_cooldowns = [500] * len(WEAPONS)
         self.state.hp = 30
         self.state.kills = 7
         self.state.rockets = [Rocket(1.5, 1.5, 0)]
@@ -108,6 +111,7 @@ class GameLifecycleTests(unittest.TestCase):
         self.assertEqual(self.state.kills, 0)
         self.assertEqual(self.state.rockets, [])
         self.assertEqual(self.state.door_anim, {})
+        self.assertEqual(self.state.weapon_cooldowns, [0] * len(WEAPONS))
         self.assertFalse(self.state.exit_open)
 
     def test_death_at_exit_does_not_load_another_level(self) -> None:
@@ -128,6 +132,7 @@ class GameLifecycleTests(unittest.TestCase):
         self.state.ammo = [0, 0, 0, 0]
         self.state.owned = [True] * 5
         self.state.weapon = Weapon.ROCKETS
+        self.state.weapon_cooldowns = [500] * len(WEAPONS)
         self.state.rockets = [Rocket(3.5, 1.5, 0)]
         restart = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r, scancode=pygame.KSCAN_R)
         with patch("shooter.input.pygame.event.get", return_value=[restart]):
@@ -137,5 +142,6 @@ class GameLifecycleTests(unittest.TestCase):
         self.assertEqual(self.state.ammo, list(INITIAL_AMMO))
         self.assertEqual(self.state.owned, [weapon.initially_owned for weapon in WEAPONS])
         self.assertEqual(self.state.weapon, Weapon.PISTOL)
+        self.assertEqual(self.state.weapon_cooldowns, [0] * len(WEAPONS))
         self.assertEqual(self.state.rockets, [])
         self.assertEqual(self.state.world.maze, original_maze)

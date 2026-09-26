@@ -58,7 +58,8 @@ class GameState:
             ammo         -- per-pool ammo counts; index via WEAPONS[weapon].ammo_pool.
             owned        -- which weapons the player has picked up.
             shooting     -- True while the firing animation is playing.
-            shoot_timer  -- ms until the next shot is allowed (ROF gate).
+            weapon_cooldowns -- ms until each weapon can fire, including unequipped ones.
+            shoot_timer  -- cooldown of the equipped weapon (ROF gate).
             mouse_held   -- True while LMB is down (drives gatling auto-fire).
             gatling_spin -- barrel rotation angle (radians).
             gatling_speed-- barrel speed (rad/ms); coasts down after release.
@@ -126,7 +127,7 @@ class GameState:
 
         # Weapon activity (the arsenal itself carries over)
         self.shooting = False
-        self.shoot_timer = 0
+        self.weapon_cooldowns: list[int] = [0] * len(WEAPONS)
         self.mouse_held = False
         self.gatling_spin = 0.0
         self.gatling_speed = 0.0
@@ -152,16 +153,20 @@ class GameState:
         self.jump_height = 0.0
         self.on_ground = True
 
-    def switch_weapon(self, weapon: Weapon) -> None:
-        """Equip a different weapon, ready to fire.
+    @property
+    def shoot_timer(self) -> int:
+        """Remaining cooldown for the equipped weapon, shared with its animation."""
+        return self.weapon_cooldowns[self.weapon]
 
-        Re-selecting the equipped weapon changes nothing, so weapon keys can't
-        zero shoot_timer and bypass the rate of fire.
-        """
+    @shoot_timer.setter
+    def shoot_timer(self, remaining: int) -> None:
+        self.weapon_cooldowns[self.weapon] = remaining
+
+    def switch_weapon(self, weapon: Weapon) -> None:
+        """Equip a different weapon without resetting either weapon's cooldown."""
         if weapon == self.weapon:
             return
         self.weapon = weapon
-        self.shoot_timer = 0
         self.shooting = False
 
     @property

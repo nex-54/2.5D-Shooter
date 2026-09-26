@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pygame
 
-from shooter.constants import WEAPONS, Weapon
+from shooter.constants import MOUSE_SENSITIVITY, WEAPONS, Weapon
 from shooter.input import handle_events
 from shooter.state import GameState
 
@@ -50,6 +50,38 @@ class PauseTests(unittest.TestCase):
         self.assertTrue(self.send(key(pygame.K_q)))
         self.send(key(pygame.K_ESCAPE))
         self.assertFalse(self.send(key(pygame.K_q)))
+
+    def test_resume_discards_motion_from_the_entire_event_batch(self) -> None:
+        for resume in (key(pygame.K_ESCAPE), pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1)):
+            with self.subTest(resume=resume):
+                self.state.paused = True
+                self.state.pa = 0.0
+                self.pressed.add(pygame.KSCAN_W)
+                self.send(
+                    pygame.event.Event(pygame.MOUSEMOTION, rel=(100, 0)),
+                    resume,
+                    pygame.event.Event(pygame.MOUSEMOTION, rel=(200, 0)),
+                    pygame.event.Event(pygame.KEYUP, scancode=pygame.KSCAN_W),
+                )
+                self.assertFalse(self.state.paused)
+                self.assertEqual(self.state.pa, 0.0)
+                self.assertNotIn(pygame.KSCAN_W, self.pressed)
+                self.send(pygame.event.Event(pygame.MOUSEMOTION, rel=(10, 0)))
+                self.assertAlmostEqual(self.state.pa, 10 * MOUSE_SENSITIVITY)
+
+    def test_pause_and_resume_in_one_batch_also_discards_resume_motion(self) -> None:
+        for pause in (key(pygame.K_ESCAPE), pygame.event.Event(pygame.WINDOWFOCUSLOST)):
+            with self.subTest(pause=pause):
+                self.state.pa = 0.0
+                self.send(
+                    pygame.event.Event(pygame.MOUSEMOTION, rel=(10, 0)),
+                    pause,
+                    pygame.event.Event(pygame.MOUSEMOTION, rel=(100, 0)),
+                    key(pygame.K_ESCAPE),
+                    pygame.event.Event(pygame.MOUSEMOTION, rel=(200, 0)),
+                )
+                self.assertFalse(self.state.paused)
+                self.assertAlmostEqual(self.state.pa, 10 * MOUSE_SENSITIVITY)
 
     def test_losing_focus_pauses_and_drops_held_input(self) -> None:
         self.pressed.add(pygame.KSCAN_W)

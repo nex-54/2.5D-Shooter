@@ -92,15 +92,17 @@ def fire_weapon(state: GameState, sfx: Sfx) -> None:
 
 
 def update_combat(state: GameState, dt: int, sfx: Sfx) -> None:
-    """Handle shoot timer and gatling auto-fire."""
-    if state.shoot_timer > 0:
-        state.shoot_timer -= dt
+    """Advance every weapon's cooldown and keep held gatling fire on schedule."""
+    # Preserve overshoot only for a pending shot. Ready/idle weapons accrue no debt.
+    next_shot = state.shoot_timer - dt if state.shoot_timer > 0 else 0
+    for weapon, remaining in enumerate(state.weapon_cooldowns):
+        state.weapon_cooldowns[weapon] = max(0, remaining - dt)
     if state.shoot_timer <= 0:
         state.shooting = False
 
     if state.weapon == Weapon.GATLING and state.mouse_held and not state.game_over:
         state.gatling_speed = 0.08
-        if _begin_shot(state, sfx):
+        while _begin_shot(state, sfx):
             sfx["gatling"].play()
             target = hitscan(
                 state.world,
@@ -112,6 +114,10 @@ def update_combat(state: GameState, dt: int, sfx: Sfx) -> None:
             )
             if target is not None:
                 _hit(state, target, sfx)
+            next_shot += WEAPONS[Weapon.GATLING].fire_interval_ms
+            state.shoot_timer = max(0, next_shot)
+            if next_shot > 0:
+                break
     else:
         # Released barrels coast to a stop over 400 ms instead of unwinding.
         state.gatling_speed = max(0.0, state.gatling_speed - dt * 0.0002)

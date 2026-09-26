@@ -183,13 +183,18 @@ class Enemy:
         wy = math.sin(self.wander_angle) * speed
         nx = self.x + wx
         ny = self.y + wy
-        if _blocks_enemy(world, nx, self.y) or _blocks_enemy(world, self.x, ny):
+        old_x, old_y = self.x, self.y
+        blocked_x = _blocks_enemy(world, nx, self.y)
+        if not blocked_x:
+            self.x = nx
+        # Check Y from the accepted X position so diagonal steps cannot enter walls.
+        blocked_y = _blocks_enemy(world, self.x, ny)
+        if not blocked_y:
+            self.y = ny
+        self.moving = self.x != old_x or self.y != old_y
+        if blocked_x or blocked_y:
             self.wander_angle = self.rng.uniform(0, 2 * math.pi)
             self.wander_timer = self.rng.randint(*self.wall_wander_timer_range)
-        else:
-            self.moving = True
-            self.x = nx
-            self.y = ny
 
     def take_damage(self, amount: int = 1) -> bool:
         """Return True only when this hit kills a living enemy."""
