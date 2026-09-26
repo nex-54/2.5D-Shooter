@@ -10,43 +10,41 @@ import pygame
 import pygame.freetype
 
 from shooter import map as gmap
-from shooter.constants import EYE_HEIGHT, HEIGHT, WIDTH, EXPLOSION_DURATION
+from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH
 from shooter.entities import Boss, Enemy, HealthPack, Rocket, Scout, Spider, WeaponPickup
 from shooter.occlusion import DepthBuffer
 from shooter.raycaster import cast_rays
 from shooter.render_sprites import (
-    draw_billboard, draw_enemies, draw_health_packs, draw_rockets, draw_weapon_pickups,
+    draw_billboard,
+    draw_enemies,
+    draw_health_packs,
+    draw_rockets,
+    draw_weapon_pickups,
 )
 from shooter.render_world import draw_3d
 from shooter.types import DoorAnim, DoorAnimMap
+from tests.support import open_world
 
 
 class SpriteOcclusionTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.saved_maze = [row.copy() for row in gmap.MAZE]
-        self.addCleanup(self.restore_maze)
-        for y, row in enumerate(gmap.MAZE):
-            row[:] = [int(x in (0, gmap.MAP_W - 1) or y in (0, gmap.MAP_H - 1))
-                      for x in range(gmap.MAP_W)]
+        self.world = open_world()
         self.screen = pygame.Surface((WIDTH, HEIGHT))
         self.depth = DepthBuffer()
         self.enemy = Enemy(6.5, 5.5)
         self.enemy.anim_time = 0.0
         self.doors: DoorAnimMap = {}
 
-    def restore_maze(self) -> None:
-        gmap.MAZE[:] = self.saved_maze
-
     def draw_world(self, eye_height: float = EYE_HEIGHT) -> None:
         self.screen.fill((9, 11, 13))
-        walls = cast_rays(2.5, 5.5, 0.0, self.doors)
+        walls = cast_rays(self.world, 2.5, 5.5, 0.0, self.doors)
         draw_3d(self.screen, walls, self.depth, None, None, eye_height, self.doors)
 
     def draw_enemy(self, eye_height: float = EYE_HEIGHT) -> None:
         draw_enemies(self.screen, [self.enemy], 2.5, 5.5, 0.0, self.depth, eye_height)
 
     def test_barrier_hides_feet_until_a_jump_sees_over_it(self) -> None:
-        gmap.MAZE[5][4] = gmap.BARRIER_TILE
+        self.world.maze[5][4] = gmap.BARRIER_TILE
         self.enemy.x = 5.5
         self.draw_world()
         before = pygame.surfarray.array3d(self.screen)
@@ -55,8 +53,9 @@ class SpriteOcclusionTests(unittest.TestCase):
         self.draw_enemy()
         after = pygame.surfarray.array3d(self.screen)
         # Standing, the barrier covers rows 469-639, over the enemy's feet.
-        self.assertTrue(np.any(pygame.surfarray.array3d(unclipped)[:, 469:640]
-                               != before[:, 469:640]))
+        self.assertTrue(
+            np.any(pygame.surfarray.array3d(unclipped)[:, 469:640] != before[:, 469:640])
+        )
         self.assertTrue(np.any(after[:, :469] != before[:, :469]))
         np.testing.assert_array_equal(after[:, 469:640], before[:, 469:640])
 
@@ -66,37 +65,39 @@ class SpriteOcclusionTests(unittest.TestCase):
         expected = self.screen.copy()
         draw_enemies(expected, [self.enemy], 2.5, 5.5, 0.0, DepthBuffer(), eye)
         self.draw_enemy(eye)
-        self.assertEqual(pygame.image.tobytes(self.screen, 'RGB'),
-                         pygame.image.tobytes(expected, 'RGB'))
+        self.assertEqual(
+            pygame.image.tobytes(self.screen, "RGB"), pygame.image.tobytes(expected, "RGB")
+        )
 
     def test_full_wall_hides_every_enemy_type(self) -> None:
-        gmap.MAZE[5][4] = 1
+        self.world.maze[5][4] = 1
         for enemy_type in (Enemy, Boss, Scout, Spider):
             with self.subTest(enemy_type=enemy_type.__name__):
                 self.enemy = enemy_type(6.5, 5.5)
                 self.draw_world()
-                before = pygame.image.tobytes(self.screen, 'RGB')
+                before = pygame.image.tobytes(self.screen, "RGB")
                 self.draw_enemy()
-                self.assertEqual(pygame.image.tobytes(self.screen, 'RGB'), before)
+                self.assertEqual(pygame.image.tobytes(self.screen, "RGB"), before)
 
     def test_enemy_in_front_of_barrier_is_not_clipped(self) -> None:
-        gmap.MAZE[5][4] = gmap.BARRIER_TILE
+        self.world.maze[5][4] = gmap.BARRIER_TILE
         self.enemy.x = 3.5
         self.draw_world()
         expected = self.screen.copy()
         draw_enemies(expected, [self.enemy], 2.5, 5.5, 0.0, DepthBuffer())
         self.draw_enemy()
-        self.assertEqual(pygame.image.tobytes(self.screen, 'RGB'),
-                         pygame.image.tobytes(expected, 'RGB'))
+        self.assertEqual(
+            pygame.image.tobytes(self.screen, "RGB"), pygame.image.tobytes(expected, "RGB")
+        )
 
     def test_opening_door_reveals_only_the_gap(self) -> None:
-        gmap.MAZE[5][4] = gmap.DOOR_TILE
+        self.world.maze[5][4] = gmap.DOOR_TILE
         self.draw_world()
-        before = pygame.image.tobytes(self.screen, 'RGB')
+        before = pygame.image.tobytes(self.screen, "RGB")
         self.draw_enemy()
-        self.assertEqual(pygame.image.tobytes(self.screen, 'RGB'), before)
+        self.assertEqual(pygame.image.tobytes(self.screen, "RGB"), before)
 
-        for phase in ('opening', 'closing'):
+        for phase in ("opening", "closing"):
             with self.subTest(phase=phase):
                 self.doors[(4, 5)] = DoorAnim(phase=phase, progress=0.5, timer=0)
                 self.draw_world()
@@ -106,29 +107,29 @@ class SpriteOcclusionTests(unittest.TestCase):
                 np.testing.assert_array_equal(after[:, :384], before[:, :384])
                 self.assertTrue(np.any(after[:, 384:] != before[:, 384:]))
 
-        self.doors[(4, 5)] = DoorAnim(phase='open', progress=1.0, timer=5000)
+        self.doors[(4, 5)] = DoorAnim(phase="open", progress=1.0, timer=5000)
         self.draw_world()
         expected = self.screen.copy()
         draw_enemies(expected, [self.enemy], 2.5, 5.5, 0.0, DepthBuffer())
         self.draw_enemy()
-        self.assertEqual(pygame.image.tobytes(self.screen, 'RGB'),
-                         pygame.image.tobytes(expected, 'RGB'))
+        self.assertEqual(
+            pygame.image.tobytes(self.screen, "RGB"), pygame.image.tobytes(expected, "RGB")
+        )
 
     def test_background_wall_or_closed_door_still_hides_enemies(self) -> None:
-        for foreground, background in ((gmap.BARRIER_TILE, 1),
-                                       (gmap.DOOR_TILE, gmap.DOOR_TILE)):
+        for foreground, background in ((gmap.BARRIER_TILE, 1), (gmap.DOOR_TILE, gmap.DOOR_TILE)):
             with self.subTest(foreground=foreground, background=background):
-                gmap.MAZE[5][4] = foreground
-                gmap.MAZE[5][5] = background
-                self.doors[(4, 5)] = DoorAnim(phase='opening', progress=0.5, timer=0)
+                self.world.maze[5][4] = foreground
+                self.world.maze[5][5] = background
+                self.doors[(4, 5)] = DoorAnim(phase="opening", progress=0.5, timer=0)
                 self.draw_world()
-                before = pygame.image.tobytes(self.screen, 'RGB')
+                before = pygame.image.tobytes(self.screen, "RGB")
                 self.draw_enemy()
-                self.assertEqual(pygame.image.tobytes(self.screen, 'RGB'), before)
+                self.assertEqual(pygame.image.tobytes(self.screen, "RGB"), before)
 
     def test_stacked_barriers_preserve_the_farther_barriers_coverage(self) -> None:
-        gmap.MAZE[5][4] = gmap.BARRIER_TILE
-        gmap.MAZE[5][5] = gmap.BARRIER_TILE
+        self.world.maze[5][4] = gmap.BARRIER_TILE
+        self.world.maze[5][5] = gmap.BARRIER_TILE
         self.draw_world()
         before = pygame.surfarray.array3d(self.screen)
         self.draw_enemy()
@@ -138,13 +139,13 @@ class SpriteOcclusionTests(unittest.TestCase):
         np.testing.assert_array_equal(after[:, 435:640], before[:, 435:640])
 
     def test_depth_is_cleared_between_frames(self) -> None:
-        gmap.MAZE[5][4] = 1
+        self.world.maze[5][4] = 1
         self.draw_world()
-        gmap.MAZE[5][4] = 0
+        self.world.maze[5][4] = 0
         self.draw_world()
-        before = pygame.image.tobytes(self.screen, 'RGB')
+        before = pygame.image.tobytes(self.screen, "RGB")
         self.draw_enemy()
-        self.assertNotEqual(pygame.image.tobytes(self.screen, 'RGB'), before)
+        self.assertNotEqual(pygame.image.tobytes(self.screen, "RGB"), before)
 
     def test_pickups_labels_and_projectiles_use_the_same_height_clipping(self) -> None:
         pygame.freetype.init()
@@ -157,15 +158,16 @@ class SpriteOcclusionTests(unittest.TestCase):
         explosion.explosion_timer = EXPLOSION_DURATION // 4
         health.anim_time = weapon.anim_time = 0.0
         drawers = {
-            'health': lambda: draw_health_packs(self.screen, [health], 2.5, 5.5, 0.0, self.depth),
-            'weapon': lambda: draw_weapon_pickups(self.screen, [weapon], 2.5, 5.5, 0.0, self.depth),
-            'rocket': lambda: draw_rockets(self.screen, [rocket], 2.5, 5.5, 0.0, self.depth),
-            'explosion': lambda: draw_rockets(self.screen, [explosion], 2.5, 5.5, 0.0, self.depth),
-            'label': lambda: draw_billboard(self.screen, font, 'TEST', 6.5, 5.5,
-                                            2.5, 5.5, 0.0, self.depth, (20, 20, 80)),
+            "health": lambda: draw_health_packs(self.screen, [health], 2.5, 5.5, 0.0, self.depth),
+            "weapon": lambda: draw_weapon_pickups(self.screen, [weapon], 2.5, 5.5, 0.0, self.depth),
+            "rocket": lambda: draw_rockets(self.screen, [rocket], 2.5, 5.5, 0.0, self.depth),
+            "explosion": lambda: draw_rockets(self.screen, [explosion], 2.5, 5.5, 0.0, self.depth),
+            "label": lambda: draw_billboard(
+                self.screen, font, "TEST", 6.5, 5.5, 2.5, 5.5, 0.0, self.depth, (20, 20, 80)
+            ),
         }
         for tile in (gmap.BARRIER_TILE, 1):
-            gmap.MAZE[5][4] = tile
+            self.world.maze[5][4] = tile
             for name, draw in drawers.items():
                 with self.subTest(tile=tile, sprite=name):
                     self.draw_world()
@@ -191,11 +193,11 @@ class SpriteOcclusionTests(unittest.TestCase):
             self.assertLessEqual(size[1], HEIGHT)
             return surface_type(size, flags)
 
-        with patch('shooter.render_sprites.pygame.Surface', side_effect=bounded_surface):
+        with patch("shooter.render_sprites.pygame.Surface", side_effect=bounded_surface):
             draw_rockets(self.screen, [rocket], 0.0, 0.0, 0.0, self.depth)
         self.assertNotEqual(self.screen.get_at((WIDTH // 2, 100))[:3], (9, 11, 13))
         self.assertEqual(self.screen.get_at((WIDTH // 2, HEIGHT - 100))[:3], (9, 11, 13))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

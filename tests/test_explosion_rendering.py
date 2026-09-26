@@ -24,14 +24,14 @@ class ExplosionRenderingTests(unittest.TestCase):
         screen.fill(self.background)
         return screen
 
-    def draw_explosion(self, screen: pygame.Surface, distance: float = 4.0,
-                       shift: int = 0) -> None:
+    def draw_explosion(self, screen: pygame.Surface, distance: float = 4.0, shift: int = 0) -> None:
         rocket = Rocket(distance, 0.0, 0.0)
         rocket.exploded = True
         rocket.explosion_timer = EXPLOSION_DURATION // 4
         # Raising the eye by shift * depth / HEIGHT lowers the sprite by shift pixels.
-        draw_rockets(screen, [rocket], 0.0, 0.0, 0.0,
-                     self.depth, EYE_HEIGHT + shift * distance / HEIGHT)
+        draw_rockets(
+            screen, [rocket], 0.0, 0.0, 0.0, self.depth, EYE_HEIGHT + shift * distance / HEIGHT
+        )
 
     def test_close_explosions_bound_allocations_and_preserve_fade(self) -> None:
         # At this age the core is one-quarter opaque and covers the viewport.
@@ -51,11 +51,9 @@ class ExplosionRenderingTests(unittest.TestCase):
         for distance in (0.101, 0.15, 0.4):
             with self.subTest(distance=distance):
                 screen = self.make_screen()
-                with patch('shooter.render_sprites.pygame.Surface',
-                           side_effect=bounded_surface):
+                with patch("shooter.render_sprites.pygame.Surface", side_effect=bounded_surface):
                     self.draw_explosion(screen, distance)
-                for point in ((0, 0), (WIDTH // 2, HEIGHT // 2),
-                              (WIDTH - 1, HEIGHT - 1)):
+                for point in ((0, 0), (WIDTH // 2, HEIGHT // 2), (WIDTH - 1, HEIGHT - 1)):
                     self.assertEqual(screen.get_at(point), expected.get_at((0, 0)))
 
     def test_offscreen_centers_preserve_visible_circle_shape(self) -> None:
@@ -68,8 +66,9 @@ class ExplosionRenderingTests(unittest.TestCase):
                 expected.blit(reference, (0, shift))
                 actual = self.make_screen()
                 self.draw_explosion(actual, shift=shift)
-                self.assertEqual(pygame.image.tobytes(actual, 'RGB'),
-                                 pygame.image.tobytes(expected, 'RGB'))
+                self.assertEqual(
+                    pygame.image.tobytes(actual, "RGB"), pygame.image.tobytes(expected, "RGB")
+                )
 
     def test_allocation_respects_surface_clip(self) -> None:
         reference = self.make_screen()
@@ -81,22 +80,20 @@ class ExplosionRenderingTests(unittest.TestCase):
         actual = self.make_screen()
         actual.set_clip(clip)
 
-        with patch('shooter.render_sprites.pygame.Surface',
-                   wraps=pygame.Surface) as allocate:
+        with patch("shooter.render_sprites.pygame.Surface", wraps=pygame.Surface) as allocate:
             self.draw_explosion(actual)
 
         self.assertEqual(allocate.call_args.args[0], clip.size)
-        self.assertEqual(pygame.image.tobytes(actual, 'RGB'),
-                         pygame.image.tobytes(expected, 'RGB'))
+        self.assertEqual(pygame.image.tobytes(actual, "RGB"), pygame.image.tobytes(expected, "RGB"))
 
     def test_fully_offscreen_explosion_allocates_nothing(self) -> None:
         screen = self.make_screen()
-        before = pygame.image.tobytes(screen, 'RGB')
-        with patch('shooter.render_sprites.pygame.Surface') as allocate:
+        before = pygame.image.tobytes(screen, "RGB")
+        with patch("shooter.render_sprites.pygame.Surface") as allocate:
             self.draw_explosion(screen, shift=HEIGHT * 2)
         allocate.assert_not_called()
-        self.assertEqual(pygame.image.tobytes(screen, 'RGB'), before)
+        self.assertEqual(pygame.image.tobytes(screen, "RGB"), before)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

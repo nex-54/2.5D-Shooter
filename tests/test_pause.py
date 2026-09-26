@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pygame
 
-from shooter.constants import AMMO_INDEX
+from shooter.constants import WEAPONS
 from shooter.game import GameState, handle_events
 
 
@@ -22,7 +22,7 @@ class PauseTests(unittest.TestCase):
 
     def send(self, *events: pygame.event.Event) -> bool:
         """Deliver events through handle_events; returns False when the game quits."""
-        with patch('shooter.game.pygame.event.get', return_value=list(events)):
+        with patch("shooter.game.pygame.event.get", return_value=list(events)):
             return handle_events(self.state, MagicMock(), self.pressed)
 
     def test_escape_toggles_pause_instead_of_quitting(self) -> None:
@@ -33,7 +33,7 @@ class PauseTests(unittest.TestCase):
 
     def test_paused_game_ignores_aim_weapon_keys_and_the_resuming_click(self) -> None:
         self.state.owned[1] = True
-        self.state.ammo[AMMO_INDEX[1]] = 10
+        self.state.ammo[WEAPONS[1].ammo_pool] = 10
         self.send(key(pygame.K_ESCAPE))
         ammo = list(self.state.ammo)
         self.send(pygame.event.Event(pygame.MOUSEMOTION, rel=(200, 0)), key(pygame.K_2))
@@ -65,5 +65,5 @@ class PauseTests(unittest.TestCase):
         self.assertFalse(self.send(key(pygame.K_ESCAPE)))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

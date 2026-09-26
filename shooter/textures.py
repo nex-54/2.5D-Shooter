@@ -5,12 +5,12 @@ Procedural texture generation — creates all wall, floor, ceiling, and door tex
 from __future__ import annotations
 
 import random
+
+import numpy as np
 import pygame
 
 from shooter.constants import TEX_SIZE
 from shooter.types import Textures
-
-import numpy as np
 
 
 def _add_noise(surf: pygame.Surface, amount: int = 15) -> None:
@@ -19,14 +19,14 @@ def _add_noise(surf: pygame.Surface, amount: int = 15) -> None:
         for x in range(surf.get_width()):
             r, g, b, _ = surf.get_at((x, y))
             n = random.randint(-amount, amount)
-            surf.set_at((x, y), (max(0, min(255, r + n)),
-                                  max(0, min(255, g + n)),
-                                  max(0, min(255, b + n))))
+            surf.set_at(
+                (x, y), (max(0, min(255, r + n)), max(0, min(255, g + n)), max(0, min(255, b + n)))
+            )
 
 
 def generate_textures() -> Textures:
     """Procedurally generate all game textures. Returns a dict (see shooter.types.Textures)."""
-    tex: Textures = {}
+    tex = Textures()
 
     # --- Wall: brick pattern ---
     wall = pygame.Surface((TEX_SIZE, TEX_SIZE))
@@ -47,11 +47,16 @@ def generate_textures() -> Textures:
             for yy in range(by, min(by + 14, TEX_SIZE)):
                 for xx in range(bx, min(bx + 30, TEX_SIZE)):
                     r, g, b, _ = wall.get_at((xx, yy))
-                    wall.set_at((xx, yy), (max(0, min(255, r + v)),
-                                            max(0, min(255, g + v // 2)),
-                                            max(0, min(255, b + v // 3))))
+                    wall.set_at(
+                        (xx, yy),
+                        (
+                            max(0, min(255, r + v)),
+                            max(0, min(255, g + v // 2)),
+                            max(0, min(255, b + v // 3)),
+                        ),
+                    )
     _add_noise(wall, 10)
-    tex['wall'] = wall
+    tex.surfaces["wall"] = wall
 
     # --- Exit: green metal door ---
     exit_s = pygame.Surface((TEX_SIZE, TEX_SIZE))
@@ -64,7 +69,7 @@ def generate_textures() -> Textures:
         for x in range(10, TEX_SIZE, 20):
             pygame.draw.circle(exit_s, (55, 140, 65), (x, y), 2)
     _add_noise(exit_s, 8)
-    tex['exit'] = exit_s
+    tex.surfaces["exit"] = exit_s
 
     # --- Barrier: wooden planks ---
     barrier = pygame.Surface((TEX_SIZE, TEX_SIZE))
@@ -78,7 +83,7 @@ def generate_textures() -> Textures:
         c = random.choice([(125, 105, 50), (145, 125, 60), (115, 95, 45)])
         pygame.draw.line(barrier, c, (gx, gy), (min(gx + gw, TEX_SIZE - 1), gy))
     _add_noise(barrier, 10)
-    tex['barrier'] = barrier
+    tex.surfaces["barrier"] = barrier
 
     # --- Floor: stone tiles ---
     floor = pygame.Surface((TEX_SIZE, TEX_SIZE))
@@ -93,7 +98,7 @@ def generate_textures() -> Textures:
         sr = random.randint(2, 4)
         pygame.draw.circle(floor, (65, 58, 48), (sx, sy), sr)
     _add_noise(floor, 12)
-    tex['floor'] = floor
+    tex.surfaces["floor"] = floor
 
     # --- Ceiling: dark panels ---
     ceil = pygame.Surface((TEX_SIZE, TEX_SIZE))
@@ -105,7 +110,7 @@ def generate_textures() -> Textures:
     pygame.draw.circle(ceil, (72, 72, 92), (16, 16), 5)
     pygame.draw.circle(ceil, (72, 72, 92), (48, 48), 5)
     _add_noise(ceil, 6)
-    tex['ceil'] = ceil
+    tex.surfaces["ceil"] = ceil
 
     # --- Door: wooden door with iron bands ---
     door = pygame.Surface((TEX_SIZE, TEX_SIZE))
@@ -125,20 +130,20 @@ def generate_textures() -> Textures:
         c = random.choice([(90, 50, 25), (110, 65, 35), (85, 45, 20)])
         pygame.draw.line(door, c, (gx, gy), (gx, min(gy + glen, TEX_SIZE - 1)))
     _add_noise(door, 8)
-    tex['door'] = door
+    tex.surfaces["door"] = door
 
     # --- Pre-extract 1px-wide column strips for each wall texture ---
-    for name in ('wall', 'exit', 'barrier', 'door'):
-        cols = []
-        s = tex[name]
+    for name in ("wall", "exit", "barrier", "door"):
+        cols: list[pygame.Surface] = []
+        s = tex.surfaces[name]
         for x in range(TEX_SIZE):
             col = pygame.Surface((1, TEX_SIZE))
             col.blit(s, (0, 0), area=(x, 0, 1, TEX_SIZE))
             cols.append(col)
-        tex[name + '_cols'] = cols
+        tex.columns[name] = cols
 
-    for name in ('floor', 'ceil', 'door'):
-        tex[name + '_np'] = pygame.surfarray.array3d(tex[name]).astype(np.float32)
+    for name in ("floor", "ceil", "door"):
+        tex.samples[name] = pygame.surfarray.array3d(tex.surfaces[name]).astype(np.float32)
 
     return tex
 
@@ -180,10 +185,10 @@ def generate_icon() -> pygame.Surface:
     arm_w = 4
     gap = 7
     for dx, dy, w, h in (
-        (0, -gap - arm_len, arm_w, arm_len),   # top
-        (0, gap, arm_w, arm_len),              # bottom
-        (-gap - arm_len, 0, arm_len, arm_w),   # left
-        (gap, 0, arm_len, arm_w),              # right
+        (0, -gap - arm_len, arm_w, arm_len),  # top
+        (0, gap, arm_w, arm_len),  # bottom
+        (-gap - arm_len, 0, arm_len, arm_w),  # left
+        (gap, 0, arm_len, arm_w),  # right
     ):
         rx = cx + dx - (w // 2 if w < arm_len else 0)
         ry = cy + dy - (h // 2 if h < arm_len else 0)

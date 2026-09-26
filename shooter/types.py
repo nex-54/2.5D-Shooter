@@ -7,10 +7,12 @@ Central place for the dict and tuple shapes that flow between modules
 
 from __future__ import annotations
 
-from typing import Any, Literal, NamedTuple, TypedDict
+from dataclasses import dataclass, field
+from typing import Literal, NamedTuple, Protocol, TypedDict
 
+import numpy as np
 import pygame
-
+from numpy.typing import NDArray
 
 # ---------------------------------------------------------------------------
 # Sound effects
@@ -28,22 +30,31 @@ Sfx = dict[str, pygame.mixer.Sound]
 # ---------------------------------------------------------------------------
 # Textures
 # ---------------------------------------------------------------------------
-# Mapping of texture name -> pygame.Surface | list[Surface] | np.ndarray,
-# built by textures.generate_textures(). Heterogeneous so typed as Any.
-#
-# Canonical keys:
-#   Surfaces:        'wall', 'exit', 'barrier', 'door', 'floor', 'ceil'
-#   Column strips:   '{name}_cols'  (list[pygame.Surface], one 1x64 column per texel)
-#                    available for 'wall', 'exit', 'barrier', 'door'
-#   Numpy samples:   '{name}_np'    (np.ndarray float32, H x W x 3)
-#                    available for 'floor', 'ceil', 'door'
-Textures = dict[str, Any]
+@dataclass
+class Textures:
+    """Generated assets, grouped by representation with checked value types.
+
+    Surfaces use wall/exit/barrier/door/floor/ceil keys, columns use
+    wall/exit/barrier/door, and samples use floor/ceil/door.
+    """
+
+    surfaces: dict[str, pygame.Surface] = field(default_factory=dict[str, pygame.Surface])
+    columns: dict[str, list[pygame.Surface]] = field(
+        default_factory=dict[str, list[pygame.Surface]]
+    )
+    samples: dict[str, NDArray[np.float32]] = field(default_factory=dict[str, NDArray[np.float32]])
+
+
+class KeyState(Protocol):
+    """Keyboard lookup implemented by pygame and headless input fixtures."""
+
+    def __getitem__(self, key: int, /) -> bool: ...
 
 
 # ---------------------------------------------------------------------------
 # Door animation state
 # ---------------------------------------------------------------------------
-DoorPhase = Literal['opening', 'open', 'closing']
+DoorPhase = Literal["opening", "open", "closing"]
 
 
 class DoorAnim(TypedDict):
@@ -55,12 +66,13 @@ class DoorAnim(TypedDict):
               during 'closing'.
     timer:    ms remaining in 'open' phase before auto-close is attempted.
     """
+
     phase: DoorPhase
     progress: float
     timer: int
 
 
-# Keyed by (col, row) of the door tile in map.MAZE.
+# Keyed by (col, row) of the door tile in LevelState.maze.
 DoorAnimMap = dict[tuple[int, int], DoorAnim]
 
 
@@ -76,6 +88,7 @@ class BgHit(NamedTuple):
     tile:   the background tile id that was hit.
     tile_coords: (col, row), used to apply the background door's animation.
     """
+
     depth: float
     offset: float
     side: int
@@ -95,6 +108,7 @@ class WallColumn(NamedTuple):
     tile_coords: (col, row) of the hit tile, used to look up per-tile
                  animation state (e.g. door slide progress).
     """
+
     depth: float
     offset: float
     side: int

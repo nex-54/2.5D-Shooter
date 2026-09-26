@@ -9,13 +9,13 @@ from collections.abc import Sequence
 import pygame
 import pygame.freetype
 
-from shooter import map as gmap
 from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH
 from shooter.entities import Boss, Enemy, HealthPack, Rocket, WeaponPickup
 from shooter.game import GameState, draw_frame
 from shooter.occlusion import DepthBuffer
 from shooter.render_sprites import Billboard, draw_enemies, draw_world_sprites
 from shooter.textures import generate_textures
+from tests.support import open_world
 
 Sprite = Enemy | HealthPack | WeaponPickup | Rocket | Billboard
 
@@ -31,10 +31,20 @@ class SpriteOrderingTests(unittest.TestCase):
         screen.fill((17, 29, 41))
         return screen
 
-    def draw_sprites(self, screen: pygame.Surface, sprites: Sequence[Sprite],
-                     angle: float = 0.0, eye_height: float = EYE_HEIGHT) -> None:
+    def draw_sprites(
+        self,
+        screen: pygame.Surface,
+        sprites: Sequence[Sprite],
+        angle: float = 0.0,
+        eye_height: float = EYE_HEIGHT,
+    ) -> None:
         draw_world_sprites(
-            screen, 2.5, 5.5, angle, self.depth, self.font,
+            screen,
+            2.5,
+            5.5,
+            angle,
+            self.depth,
+            self.font,
             enemies=[s for s in sprites if isinstance(s, Enemy)],
             health_packs=[s for s in sprites if isinstance(s, HealthPack)],
             weapon_pickups=[s for s in sprites if isinstance(s, WeaponPickup)],
@@ -43,23 +53,27 @@ class SpriteOrderingTests(unittest.TestCase):
             eye_height=eye_height,
         )
 
-    def assert_composition(self, farther: Sprite, nearer: Sprite,
-                           angle: float = 0.0, eye_height: float = EYE_HEIGHT) -> None:
+    def assert_composition(
+        self, farther: Sprite, nearer: Sprite, angle: float = 0.0, eye_height: float = EYE_HEIGHT
+    ) -> None:
         # Single-object passes give a reference image with a known physical order.
         expected = self.make_screen()
         self.draw_sprites(expected, [farther], angle, eye_height)
         self.draw_sprites(expected, [nearer], angle, eye_height)
-        expected_pixels = pygame.image.tobytes(expected, 'RGB')
+        expected_pixels = pygame.image.tobytes(expected, "RGB")
         reversed_order = self.make_screen()
         self.draw_sprites(reversed_order, [nearer], angle, eye_height)
         self.draw_sprites(reversed_order, [farther], angle, eye_height)
-        self.assertNotEqual(expected_pixels, pygame.image.tobytes(reversed_order, 'RGB'),
-                            'The scene must visibly distinguish the two draw orders')
+        self.assertNotEqual(
+            expected_pixels,
+            pygame.image.tobytes(reversed_order, "RGB"),
+            "The scene must visibly distinguish the two draw orders",
+        )
 
         for sprites in ([nearer, farther], [farther, nearer]):
             actual = self.make_screen()
             self.draw_sprites(actual, sprites, angle, eye_height)
-            self.assertEqual(pygame.image.tobytes(actual, 'RGB'), expected_pixels)
+            self.assertEqual(pygame.image.tobytes(actual, "RGB"), expected_pixels)
 
     def make_foreground_objects(self, x: float) -> list[Sprite]:
         health = HealthPack(x, 5.5)
@@ -69,23 +83,27 @@ class SpriteOrderingTests(unittest.TestCase):
         explosion = Rocket(x, 5.5, 0.0)
         explosion.exploded = True
         explosion.explosion_timer = EXPLOSION_DURATION // 4
-        label = Billboard('TEST', x, 5.5, (20, 20, 80))
+        label = Billboard("TEST", x, 5.5, (20, 20, 80))
         return [health, weapon, rocket, explosion, label]
 
     def test_near_enemy_covers_distant_pickups_effects_and_labels(self) -> None:
         enemy = Enemy(4.5, 5.5)
         enemy.anim_time = 0.0
         for farther in self.make_foreground_objects(6.5):
-            with self.subTest(sprite=type(farther).__name__,
-                              exploded=isinstance(farther, Rocket) and farther.exploded):
+            with self.subTest(
+                sprite=type(farther).__name__,
+                exploded=isinstance(farther, Rocket) and farther.exploded,
+            ):
                 self.assert_composition(farther, enemy)
 
     def test_near_pickups_effects_and_labels_cover_distant_enemy(self) -> None:
         enemy = Enemy(6.5, 5.5)
         enemy.anim_time = 0.0
         for nearer in self.make_foreground_objects(4.5):
-            with self.subTest(sprite=type(nearer).__name__,
-                              exploded=isinstance(nearer, Rocket) and nearer.exploded):
+            with self.subTest(
+                sprite=type(nearer).__name__,
+                exploded=isinstance(nearer, Rocket) and nearer.exploded,
+            ):
                 self.assert_composition(enemy, nearer)
 
     def test_pickups_sort_within_and_between_types(self) -> None:
@@ -98,20 +116,22 @@ class SpriteOrderingTests(unittest.TestCase):
         for angle in (0.0, math.pi / 2):
             with self.subTest(angle=angle):
                 cos_a, sin_a = math.cos(angle), math.sin(angle)
-                enemy = Enemy(2.5 + 2.0 * cos_a - 0.7 * sin_a,
-                              5.5 + 2.0 * sin_a + 0.7 * cos_a)
-                health = HealthPack(2.5 + 2.01 * cos_a - 0.6 * sin_a,
-                                    5.5 + 2.01 * sin_a + 0.6 * cos_a)
+                enemy = Enemy(2.5 + 2.0 * cos_a - 0.7 * sin_a, 5.5 + 2.0 * sin_a + 0.7 * cos_a)
+                health = HealthPack(
+                    2.5 + 2.01 * cos_a - 0.6 * sin_a, 5.5 + 2.01 * sin_a + 0.6 * cos_a
+                )
                 enemy.anim_time = health.anim_time = 0.0
                 # The enemy's camera depth is smaller despite its longer radial distance.
-                self.assertGreater(math.hypot(enemy.x - 2.5, enemy.y - 5.5),
-                                   math.hypot(health.x - 2.5, health.y - 5.5))
+                self.assertGreater(
+                    math.hypot(enemy.x - 2.5, enemy.y - 5.5),
+                    math.hypot(health.x - 2.5, health.y - 5.5),
+                )
                 self.assert_composition(health, enemy, angle)
 
     def test_boss_label_stays_over_its_boss_at_equal_depth(self) -> None:
         boss = Boss(4.5, 5.5)
         boss.anim_time = 0.0
-        label = Billboard('BOSS', boss.x, boss.y, (80, 20, 80))
+        label = Billboard("BOSS", boss.x, boss.y, (80, 20, 80))
         self.assert_composition(boss, label)
 
     def test_mixed_sprites_preserve_wall_clipping_at_jump_height(self) -> None:
@@ -124,19 +144,17 @@ class SpriteOrderingTests(unittest.TestCase):
 
         screen = self.make_screen()
         covered = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
-        before = pygame.image.tobytes(screen.subsurface(covered), 'RGB')
-        self.draw_sprites(screen, [enemy, *self.make_foreground_objects(6.5)],
-                          eye_height=EYE_HEIGHT + 0.4)
-        self.assertEqual(pygame.image.tobytes(screen.subsurface(covered), 'RGB'), before)
+        before = pygame.image.tobytes(screen.subsurface(covered), "RGB")
+        self.draw_sprites(
+            screen, [enemy, *self.make_foreground_objects(6.5)], eye_height=EYE_HEIGHT + 0.4
+        )
+        self.assertEqual(pygame.image.tobytes(screen.subsurface(covered), "RGB"), before)
 
     def test_game_frame_keeps_distant_pickup_behind_enemy(self) -> None:
-        saved_maze = [row.copy() for row in gmap.MAZE]
-        self.addCleanup(lambda: gmap.MAZE.__setitem__(slice(None), saved_maze))
-        for y, row in enumerate(gmap.MAZE):
-            row[:] = [int(x in (0, gmap.MAP_W - 1) or y in (0, gmap.MAP_H - 1))
-                      for x in range(gmap.MAP_W)]
+        self.world = open_world()
 
         state = GameState()
+        state.world = self.world
         state.px, state.py = 2.5, 5.5
         enemy = Enemy(4.5, 5.5)
         health = HealthPack(6.5, 5.5)
@@ -153,5 +171,5 @@ class SpriteOrderingTests(unittest.TestCase):
         self.assertEqual(actual.get_at(point), expected.get_at(point))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

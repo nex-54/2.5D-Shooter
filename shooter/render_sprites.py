@@ -9,16 +9,24 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import pygame
+import pygame.freetype
+
+from shooter.constants import (
+    EXPLOSION_DURATION,
+    EYE_HEIGHT,
+    FOV,
+    HALF_FOV,
+    HEIGHT,
+    MAX_DEPTH,
+    WHITE,
+    WIDTH,
+    normalize_angle,
+)
 from shooter.entities import Enemy, HealthPack, Rocket, WeaponPickup
 from shooter.occlusion import DepthBuffer
-from shooter.constants import (
-    WIDTH, HEIGHT, FOV, HALF_FOV, MAX_DEPTH, EYE_HEIGHT,
-    WHITE, normalize_angle,
-    EXPLOSION_DURATION,
-)
 
 
 class Billboard(NamedTuple):
@@ -37,23 +45,33 @@ def _eye_row(depth: float, eye_height: float) -> int:
     return HEIGHT // 2 + int((eye_height - EYE_HEIGHT) * HEIGHT / depth)
 
 
-def draw_world_sprites(screen: pygame.Surface, px: float, py: float, pa: float,
-                       z_buffer: DepthBuffer, font: Any, *,
-                       enemies: Sequence[Enemy] = (),
-                       health_packs: Sequence[HealthPack] = (),
-                       weapon_pickups: Sequence[WeaponPickup] = (),
-                       rockets: Sequence[Rocket] = (),
-                       billboards: Sequence[Billboard] = (),
-                       eye_height: float = EYE_HEIGHT) -> None:
+def draw_world_sprites(
+    screen: pygame.Surface,
+    px: float,
+    py: float,
+    pa: float,
+    z_buffer: DepthBuffer,
+    font: pygame.freetype.Font,
+    *,
+    enemies: Sequence[Enemy] = (),
+    health_packs: Sequence[HealthPack] = (),
+    weapon_pickups: Sequence[WeaponPickup] = (),
+    rockets: Sequence[Rocket] = (),
+    billboards: Sequence[Billboard] = (),
+    eye_height: float = EYE_HEIGHT,
+) -> None:
     """Draw all world sprites back to front, sharing the wall clipping buffer."""
     sprites: list[Enemy | HealthPack | WeaponPickup | Rocket | Billboard] = [
-        *enemies, *health_packs, *weapon_pickups, *rockets, *billboards,
+        *enemies,
+        *health_packs,
+        *weapon_pickups,
+        *rockets,
+        *billboards,
     ]
     cos_a, sin_a = math.cos(pa), math.sin(pa)
     # Camera depth matches the projection and wall buffer, unlike radial distance.
     # Stable ties leave labels over their own enemies at the same world position.
-    sprites.sort(key=lambda sprite: (sprite.x - px) * cos_a + (sprite.y - py) * sin_a,
-                 reverse=True)
+    sprites.sort(key=lambda sprite: (sprite.x - px) * cos_a + (sprite.y - py) * sin_a, reverse=True)
     for sprite in sprites:
         if isinstance(sprite, Enemy):
             draw_enemies(screen, [sprite], px, py, pa, z_buffer, eye_height)
@@ -64,18 +82,35 @@ def draw_world_sprites(screen: pygame.Surface, px: float, py: float, pa: float,
         elif isinstance(sprite, Rocket):
             draw_rockets(screen, [sprite], px, py, pa, z_buffer, eye_height)
         else:
-            draw_billboard(screen, font, sprite.label, sprite.x, sprite.y,
-                           px, py, pa, z_buffer, sprite.bg_color, eye_height)
+            draw_billboard(
+                screen,
+                font,
+                sprite.label,
+                sprite.x,
+                sprite.y,
+                px,
+                py,
+                pa,
+                z_buffer,
+                sprite.bg_color,
+                eye_height,
+            )
 
 
 # ---------------------------------------------------------------------------
 # Enemy sprites
 # ---------------------------------------------------------------------------
-def draw_enemies(screen: pygame.Surface, enemies: list[Any],
-                 px: float, py: float, pa: float,
-                 z_buffer: DepthBuffer, eye_height: float = EYE_HEIGHT) -> None:
+def draw_enemies(
+    screen: pygame.Surface,
+    enemies: list[Enemy],
+    px: float,
+    py: float,
+    pa: float,
+    z_buffer: DepthBuffer,
+    eye_height: float = EYE_HEIGHT,
+) -> None:
     """Sort and draw enemies, clipping only pixels covered by nearer geometry."""
-    visible = []
+    visible: list[tuple[float, float, Enemy]] = []
     for e in enemies:
         if not e.alive:
             continue
@@ -105,8 +140,9 @@ def draw_enemies(screen: pygame.Surface, enemies: list[Any],
         half_w = int(sprite_w * 1.2) + 4
         top_ext = sprite_h // 2 + 4
         bottom_ext = sprite_h + sprite_h // 4 + 4
-        bounds = pygame.Rect(screen_x - half_w, screen_y - top_ext,
-                             half_w * 2, top_ext + bottom_ext)
+        bounds = pygame.Rect(
+            screen_x - half_w, screen_y - top_ext, half_w * 2, top_ext + bottom_ext
+        )
         with z_buffer.sprite(screen, bounds, corrected) as layer:
             if layer is None:
                 continue
@@ -125,17 +161,46 @@ def draw_enemies(screen: pygame.Surface, enemies: list[Any],
                 bob_offset = int(math.sin(anim * 2) * sprite_h * 0.015)
             attack_phase = (math.sin(anim * 8) * 0.5 + 0.5) if e.attacking else 0
             if e.is_spider:
-                _draw_spider(target, e, screen_x - origin_x, screen_y - origin_y,
-                             sprite_h, sprite_w, shade, hit, anim, attack_phase)
+                _draw_spider(
+                    target,
+                    e,
+                    screen_x - origin_x,
+                    screen_y - origin_y,
+                    sprite_h,
+                    sprite_w,
+                    shade,
+                    hit,
+                    anim,
+                    attack_phase,
+                )
             else:
-                _draw_humanoid(target, e, screen_x - origin_x, screen_y - origin_y,
-                               sprite_h, sprite_w, shade, hit, walk_cycle,
-                               bob_offset, attack_phase)
+                _draw_humanoid(
+                    target,
+                    e,
+                    screen_x - origin_x,
+                    screen_y - origin_y,
+                    sprite_h,
+                    sprite_w,
+                    shade,
+                    hit,
+                    walk_cycle,
+                    bob_offset,
+                    attack_phase,
+                )
 
 
-def _draw_spider(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
-                 sprite_h: int, sprite_w: int,
-                 shade: float, hit: bool, anim: float, attack_phase: float) -> None:
+def _draw_spider(
+    screen: pygame.Surface,
+    e: Enemy,
+    screen_x: int,
+    screen_y: int,
+    sprite_h: int,
+    sprite_w: int,
+    shade: float,
+    hit: bool,
+    anim: float,
+    attack_phase: float,
+) -> None:
     """Draw a spider enemy sprite."""
     sp_y = screen_y + sprite_h // 3
 
@@ -157,22 +222,29 @@ def _draw_spider(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
     abd_ry = max(sprite_h // 5, 3)
     abd_cx = screen_x
     abd_cy = sp_y + sprite_h // 3
-    pygame.draw.ellipse(screen, (br, bg, bb),
-                        (abd_cx - abd_rx, abd_cy - abd_ry, abd_rx * 2, abd_ry * 2))
+    pygame.draw.ellipse(
+        screen, (br, bg, bb), (abd_cx - abd_rx, abd_cy - abd_ry, abd_rx * 2, abd_ry * 2)
+    )
     if abd_rx > 4:
-        pygame.draw.ellipse(screen, (hi_r, hi_g, hi_b),
-                            (abd_cx - abd_rx // 2, abd_cy - abd_ry + 2,
-                             abd_rx, abd_ry * 2 // 3))
+        pygame.draw.ellipse(
+            screen,
+            (hi_r, hi_g, hi_b),
+            (abd_cx - abd_rx // 2, abd_cy - abd_ry + 2, abd_rx, abd_ry * 2 // 3),
+        )
     if abd_rx > 5 and not hit:
         mark_color = (int(200 * shade), int(20 * shade), int(20 * shade))
         mw = max(abd_rx // 3, 2)
         mh = max(abd_ry // 2, 2)
-        pygame.draw.polygon(screen, mark_color, [
-            (abd_cx, abd_cy - mh),
-            (abd_cx + mw, abd_cy),
-            (abd_cx, abd_cy + mh),
-            (abd_cx - mw, abd_cy),
-        ])
+        pygame.draw.polygon(
+            screen,
+            mark_color,
+            [
+                (abd_cx, abd_cy - mh),
+                (abd_cx + mw, abd_cy),
+                (abd_cx, abd_cy + mh),
+                (abd_cx - mw, abd_cy),
+            ],
+        )
 
     # cephalothorax
     ceph_r = max(sprite_w // 4, 3)
@@ -180,9 +252,9 @@ def _draw_spider(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
     ceph_cy = sp_y + sprite_h // 6
     pygame.draw.circle(screen, (br, bg, bb), (ceph_cx, ceph_cy), ceph_r)
     if ceph_r > 4:
-        pygame.draw.circle(screen, (hi_r, hi_g, hi_b),
-                           (ceph_cx - ceph_r // 4, ceph_cy - ceph_r // 4),
-                           ceph_r // 3)
+        pygame.draw.circle(
+            screen, (hi_r, hi_g, hi_b), (ceph_cx - ceph_r // 4, ceph_cy - ceph_r // 4), ceph_r // 3
+        )
 
     # 8 legs
     leg_thickness = max(2, sprite_w // 16)
@@ -190,7 +262,11 @@ def _draw_spider(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
     for side in (-1, 1):
         for i in range(4):
             phase_off = i * 0.8 + (0.4 if side > 0 else 0)
-            leg_anim = math.sin(anim * 10 + phase_off) * 0.3 if e.moving else math.sin(anim * 2 + phase_off) * 0.08
+            leg_anim = (
+                math.sin(anim * 10 + phase_off) * 0.3
+                if e.moving
+                else math.sin(anim * 2 + phase_off) * 0.08
+            )
             base_angle = -0.6 + i * 0.45
             angle = base_angle + leg_anim
 
@@ -206,7 +282,9 @@ def _draw_spider(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
 
     # eyes
     if ceph_r > 4:
-        eye_color = (int(220 * shade), int(20 * shade), int(20 * shade)) if not hit else (255, 255, 255)
+        eye_color = (
+            (int(220 * shade), int(20 * shade), int(20 * shade)) if not hit else (255, 255, 255)
+        )
         eye_size = max(ceph_r // 5, 1)
         for ox, oy in [(-2, -2), (2, -2), (-4, 0), (4, 0)]:
             ex = ceph_cx + ox * eye_size
@@ -215,16 +293,26 @@ def _draw_spider(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
 
     # fangs
     if ceph_r > 5:
-        fang_color = (int(180 * shade), int(160 * shade), int(130 * shade)) if not hit else (255, 255, 255)
+        fang_color = (
+            (int(180 * shade), int(160 * shade), int(130 * shade)) if not hit else (255, 255, 255)
+        )
         fang_len = ceph_r * 2 // 3
         fang_y_base = ceph_cy + ceph_r // 2
         fang_spread = 2 + int(attack_phase * 3)
-        pygame.draw.line(screen, fang_color,
-                         (ceph_cx - fang_spread, fang_y_base),
-                         (ceph_cx - fang_spread - 1, fang_y_base + fang_len), max(leg_thickness, 2))
-        pygame.draw.line(screen, fang_color,
-                         (ceph_cx + fang_spread, fang_y_base),
-                         (ceph_cx + fang_spread + 1, fang_y_base + fang_len), max(leg_thickness, 2))
+        pygame.draw.line(
+            screen,
+            fang_color,
+            (ceph_cx - fang_spread, fang_y_base),
+            (ceph_cx - fang_spread - 1, fang_y_base + fang_len),
+            max(leg_thickness, 2),
+        )
+        pygame.draw.line(
+            screen,
+            fang_color,
+            (ceph_cx + fang_spread, fang_y_base),
+            (ceph_cx + fang_spread + 1, fang_y_base + fang_len),
+            max(leg_thickness, 2),
+        )
 
     # HP bar
     if e.hp < e.max_hp:
@@ -237,10 +325,19 @@ def _draw_spider(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
         pygame.draw.rect(screen, (220, 30, 30), (bar_x, bar_y, fill_w, bar_h))
 
 
-def _draw_humanoid(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
-                   sprite_h: int, sprite_w: int,
-                   shade: float, hit: bool, walk_cycle: float,
-                   bob_offset: int, attack_phase: float) -> None:
+def _draw_humanoid(
+    screen: pygame.Surface,
+    e: Enemy,
+    screen_x: int,
+    screen_y: int,
+    sprite_h: int,
+    sprite_w: int,
+    shade: float,
+    hit: bool,
+    walk_cycle: float,
+    bob_offset: int,
+    attack_phase: float,
+) -> None:
     """Draw a humanoid enemy sprite (regular, scout, or boss)."""
     # --- Legs ---
     leg_top = screen_y + sprite_h * 3 // 4 - bob_offset
@@ -250,16 +347,33 @@ def _draw_humanoid(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
     leg_color = (40, 40, 40) if not hit else WHITE
     left_leg_offset = int(walk_cycle * sprite_w * 0.2)
     right_leg_offset = -left_leg_offset
-    pygame.draw.rect(screen, leg_color,
-                     (screen_x - leg_gap - leg_w // 2 + left_leg_offset, leg_top, leg_w, leg_h))
-    pygame.draw.rect(screen, leg_color,
-                     (screen_x + leg_gap - leg_w // 2 + right_leg_offset, leg_top, leg_w, leg_h))
+    pygame.draw.rect(
+        screen,
+        leg_color,
+        (screen_x - leg_gap - leg_w // 2 + left_leg_offset, leg_top, leg_w, leg_h),
+    )
+    pygame.draw.rect(
+        screen,
+        leg_color,
+        (screen_x + leg_gap - leg_w // 2 + right_leg_offset, leg_top, leg_w, leg_h),
+    )
     boot_h = max(leg_h // 4, 2)
     boot_color = (30, 30, 30) if not hit else WHITE
-    pygame.draw.rect(screen, boot_color,
-                     (screen_x - leg_gap - leg_w + left_leg_offset, leg_top + leg_h - boot_h, leg_w * 2, boot_h))
-    pygame.draw.rect(screen, boot_color,
-                     (screen_x + leg_gap - leg_w + right_leg_offset, leg_top + leg_h - boot_h, leg_w * 2, boot_h))
+    pygame.draw.rect(
+        screen,
+        boot_color,
+        (screen_x - leg_gap - leg_w + left_leg_offset, leg_top + leg_h - boot_h, leg_w * 2, boot_h),
+    )
+    pygame.draw.rect(
+        screen,
+        boot_color,
+        (
+            screen_x + leg_gap - leg_w + right_leg_offset,
+            leg_top + leg_h - boot_h,
+            leg_w * 2,
+            boot_h,
+        ),
+    )
 
     # --- Torso ---
     torso_top = screen_y + sprite_h * 2 // 7 - bob_offset
@@ -274,22 +388,28 @@ def _draw_humanoid(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
     tr = int(base_r * shade)
     tg = int(base_g * shade)
     tb = int(base_b * shade)
-    pygame.draw.rect(screen, (tr, tg, tb),
-                     (screen_x - torso_w // 2, torso_top, torso_w, torso_h))
+    pygame.draw.rect(screen, (tr, tg, tb), (screen_x - torso_w // 2, torso_top, torso_w, torso_h))
     highlight_w = max(torso_w // 5, 2)
     hr = min(255, int(base_r * shade * 1.4))
     hg = min(255, int(base_g * shade * 1.4))
     hb = min(255, int(base_b * shade * 1.4))
-    pygame.draw.rect(screen, (hr, hg, hb),
-                     (screen_x - torso_w // 2, torso_top, highlight_w, torso_h))
+    pygame.draw.rect(
+        screen, (hr, hg, hb), (screen_x - torso_w // 2, torso_top, highlight_w, torso_h)
+    )
     sr = int(base_r * shade * 0.5)
     sg = int(base_g * shade * 0.5)
     sb = int(base_b * shade * 0.5)
-    pygame.draw.rect(screen, (sr, sg, sb),
-                     (screen_x + torso_w // 2 - highlight_w, torso_top, highlight_w, torso_h))
+    pygame.draw.rect(
+        screen,
+        (sr, sg, sb),
+        (screen_x + torso_w // 2 - highlight_w, torso_top, highlight_w, torso_h),
+    )
     belt_y = torso_top + torso_h - max(torso_h // 8, 2)
-    pygame.draw.rect(screen, (50, 30, 20) if not hit else WHITE,
-                     (screen_x - torso_w // 2, belt_y, torso_w, max(torso_h // 8, 2)))
+    pygame.draw.rect(
+        screen,
+        (50, 30, 20) if not hit else WHITE,
+        (screen_x - torso_w // 2, belt_y, torso_w, max(torso_h // 8, 2)),
+    )
 
     # --- Arms ---
     arm_w = max(torso_w // 5, 2)
@@ -304,23 +424,36 @@ def _draw_humanoid(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
     left_arm_swing = int(-walk_cycle * sprite_h * 0.08)
     right_arm_swing = int(walk_cycle * sprite_h * 0.08)
     right_arm_raise = int(attack_phase * arm_h * 0.6)
-    pygame.draw.rect(screen, arm_color,
-                     (screen_x - torso_w // 2 - arm_w, arm_top + left_arm_swing, arm_w, arm_h))
-    pygame.draw.rect(screen, arm_color,
-                     (screen_x + torso_w // 2, arm_top + right_arm_swing - right_arm_raise, arm_w, arm_h))
+    pygame.draw.rect(
+        screen, arm_color, (screen_x - torso_w // 2 - arm_w, arm_top + left_arm_swing, arm_w, arm_h)
+    )
+    pygame.draw.rect(
+        screen,
+        arm_color,
+        (screen_x + torso_w // 2, arm_top + right_arm_swing - right_arm_raise, arm_w, arm_h),
+    )
     hand_r = max(arm_w * 2 // 3, 2)
     hand_color = (int(200 * shade), int(160 * shade), int(120 * shade)) if not hit else WHITE
-    pygame.draw.circle(screen, hand_color,
-                       (screen_x - torso_w // 2 - arm_w // 2, arm_top + arm_h + left_arm_swing), hand_r)
-    pygame.draw.circle(screen, hand_color,
-                       (screen_x + torso_w // 2 + arm_w // 2, arm_top + arm_h + right_arm_swing - right_arm_raise), hand_r)
+    pygame.draw.circle(
+        screen,
+        hand_color,
+        (screen_x - torso_w // 2 - arm_w // 2, arm_top + arm_h + left_arm_swing),
+        hand_r,
+    )
+    pygame.draw.circle(
+        screen,
+        hand_color,
+        (screen_x + torso_w // 2 + arm_w // 2, arm_top + arm_h + right_arm_swing - right_arm_raise),
+        hand_r,
+    )
 
     # --- Neck ---
     neck_w = max(torso_w // 5, 2)
     neck_h = max(sprite_h // 16, 2)
     neck_color = (int(200 * shade), int(160 * shade), int(120 * shade)) if not hit else WHITE
-    pygame.draw.rect(screen, neck_color,
-                     (screen_x - neck_w // 2, torso_top - neck_h, neck_w, neck_h))
+    pygame.draw.rect(
+        screen, neck_color, (screen_x - neck_w // 2, torso_top - neck_h, neck_w, neck_h)
+    )
 
     # --- Head ---
     head_r = max(sprite_w // 3, 4)
@@ -330,8 +463,7 @@ def _draw_humanoid(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
     skin_b = int(130 * shade)
     if hit:
         skin_r, skin_g, skin_b = 255, 255, 255
-    pygame.draw.circle(screen, (skin_r, skin_g, skin_b),
-                       (screen_x, head_cy), head_r)
+    pygame.draw.circle(screen, (skin_r, skin_g, skin_b), (screen_x, head_cy), head_r)
     if head_r > 6:
         hl_r = head_r // 3
         hl_x = screen_x - head_r // 4
@@ -349,47 +481,71 @@ def _draw_humanoid(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
     if head_r > 5:
         eye_off = head_r // 3
         eye_r_size = max(head_r // 4, 2)
-        pygame.draw.circle(screen, (240, 240, 240),
-                           (screen_x - eye_off, head_cy - head_r // 6), eye_r_size)
-        pygame.draw.circle(screen, (240, 240, 240),
-                           (screen_x + eye_off, head_cy - head_r // 6), eye_r_size)
+        pygame.draw.circle(
+            screen, (240, 240, 240), (screen_x - eye_off, head_cy - head_r // 6), eye_r_size
+        )
+        pygame.draw.circle(
+            screen, (240, 240, 240), (screen_x + eye_off, head_cy - head_r // 6), eye_r_size
+        )
         pupil_r = max(eye_r_size // 2, 1)
-        pygame.draw.circle(screen, (20, 20, 20),
-                           (screen_x - eye_off, head_cy - head_r // 6), pupil_r)
-        pygame.draw.circle(screen, (20, 20, 20),
-                           (screen_x + eye_off, head_cy - head_r // 6), pupil_r)
+        pygame.draw.circle(
+            screen, (20, 20, 20), (screen_x - eye_off, head_cy - head_r // 6), pupil_r
+        )
+        pygame.draw.circle(
+            screen, (20, 20, 20), (screen_x + eye_off, head_cy - head_r // 6), pupil_r
+        )
         brow_y = head_cy - head_r // 6 - eye_r_size - 1
         brow_w = eye_r_size + 2
-        pygame.draw.line(screen, (40, 20, 20),
-                         (screen_x - eye_off - brow_w // 2, brow_y - 2),
-                         (screen_x - eye_off + brow_w // 2, brow_y + 1), 2)
-        pygame.draw.line(screen, (40, 20, 20),
-                         (screen_x + eye_off - brow_w // 2, brow_y + 1),
-                         (screen_x + eye_off + brow_w // 2, brow_y - 2), 2)
+        pygame.draw.line(
+            screen,
+            (40, 20, 20),
+            (screen_x - eye_off - brow_w // 2, brow_y - 2),
+            (screen_x - eye_off + brow_w // 2, brow_y + 1),
+            2,
+        )
+        pygame.draw.line(
+            screen,
+            (40, 20, 20),
+            (screen_x + eye_off - brow_w // 2, brow_y + 1),
+            (screen_x + eye_off + brow_w // 2, brow_y - 2),
+            2,
+        )
 
     # --- Mouth ---
     if head_r > 6:
         mouth_y = head_cy + head_r // 3
         mouth_w = head_r // 2
-        pygame.draw.arc(screen, (60, 20, 20),
-                        (screen_x - mouth_w, mouth_y - mouth_w // 3,
-                         mouth_w * 2, mouth_w),
-                        math.pi, 2 * math.pi, 2)
+        pygame.draw.arc(
+            screen,
+            (60, 20, 20),
+            (screen_x - mouth_w, mouth_y - mouth_w // 3, mouth_w * 2, mouth_w),
+            math.pi,
+            2 * math.pi,
+            2,
+        )
 
     # --- Boss horns ---
     if e.is_boss and head_r > 5:
         horn_color = (180, 160, 60) if not hit else WHITE
         horn_h = head_r
-        pygame.draw.polygon(screen, horn_color, [
-            (screen_x - head_r + 2, head_cy - head_r // 2),
-            (screen_x - head_r - horn_h // 2, head_cy - head_r - horn_h),
-            (screen_x - head_r // 2, head_cy - head_r + 2),
-        ])
-        pygame.draw.polygon(screen, horn_color, [
-            (screen_x + head_r - 2, head_cy - head_r // 2),
-            (screen_x + head_r + horn_h // 2, head_cy - head_r - horn_h),
-            (screen_x + head_r // 2, head_cy - head_r + 2),
-        ])
+        pygame.draw.polygon(
+            screen,
+            horn_color,
+            [
+                (screen_x - head_r + 2, head_cy - head_r // 2),
+                (screen_x - head_r - horn_h // 2, head_cy - head_r - horn_h),
+                (screen_x - head_r // 2, head_cy - head_r + 2),
+            ],
+        )
+        pygame.draw.polygon(
+            screen,
+            horn_color,
+            [
+                (screen_x + head_r - 2, head_cy - head_r // 2),
+                (screen_x + head_r + horn_h // 2, head_cy - head_r - horn_h),
+                (screen_x + head_r // 2, head_cy - head_r + 2),
+            ],
+        )
 
     # --- HP bar ---
     if e.hp < e.max_hp:
@@ -409,10 +565,19 @@ def _draw_humanoid(screen: pygame.Surface, e: Any, screen_x: int, screen_y: int,
 # ---------------------------------------------------------------------------
 # Billboards & Pickups
 # ---------------------------------------------------------------------------
-def draw_billboard(screen: pygame.Surface, font: Any, label: str,
-                   wx: float, wy: float, px: float, py: float, pa: float,
-                   z_buffer: DepthBuffer,
-                   bg_color: tuple[int, int, int], eye_height: float = EYE_HEIGHT) -> None:
+def draw_billboard(
+    screen: pygame.Surface,
+    font: pygame.freetype.Font,
+    label: str,
+    wx: float,
+    wy: float,
+    px: float,
+    py: float,
+    pa: float,
+    z_buffer: DepthBuffer,
+    bg_color: tuple[int, int, int],
+    eye_height: float = EYE_HEIGHT,
+) -> None:
     """Draw a floating text label at world position (wx, wy)."""
     dx = wx - px
     dy = wy - py
@@ -442,9 +607,15 @@ def draw_billboard(screen: pygame.Surface, font: Any, label: str,
         target.blit(text_surf, (tx - origin_x, ty - origin_y))
 
 
-def draw_health_packs(screen: pygame.Surface, packs: list[Any],
-                      px: float, py: float, pa: float,
-                      z_buffer: DepthBuffer, eye_height: float = EYE_HEIGHT) -> None:
+def draw_health_packs(
+    screen: pygame.Surface,
+    packs: list[HealthPack],
+    px: float,
+    py: float,
+    pa: float,
+    z_buffer: DepthBuffer,
+    eye_height: float = EYE_HEIGHT,
+) -> None:
     """Draw health packs as floating 3D crosses."""
     for hp_pack in packs:
         if not hp_pack.active:
@@ -477,34 +648,49 @@ def draw_health_packs(screen: pygame.Surface, packs: list[Any],
             screen_x -= origin_x
             cy -= origin_y
             box_s = size
-            pygame.draw.rect(target, (int(220 * shade), int(220 * shade), int(220 * shade)),
-                             (screen_x - box_s // 2, cy - box_s // 2, box_s, box_s))
+            pygame.draw.rect(
+                target,
+                (int(220 * shade), int(220 * shade), int(220 * shade)),
+                (screen_x - box_s // 2, cy - box_s // 2, box_s, box_s),
+            )
             cross_w = max(size // 5, 2)
             cross_h = size * 3 // 4
             cr = int(200 * shade)
             cg = int(30 * shade)
             cb = int(30 * shade)
-            pygame.draw.rect(target, (cr, cg, cb),
-                             (screen_x - cross_w // 2, cy - cross_h // 2, cross_w, cross_h))
-            pygame.draw.rect(target, (cr, cg, cb),
-                             (screen_x - cross_h // 2, cy - cross_w // 2, cross_h, cross_w))
+            pygame.draw.rect(
+                target, (cr, cg, cb), (screen_x - cross_w // 2, cy - cross_h // 2, cross_w, cross_h)
+            )
+            pygame.draw.rect(
+                target, (cr, cg, cb), (screen_x - cross_h // 2, cy - cross_w // 2, cross_h, cross_w)
+            )
 
             glow = int(abs(math.sin(hp_pack.anim_time * 2)) * 80 + 40)
-            pygame.draw.rect(target, (glow, glow, glow),
-                             (screen_x - box_s // 2, cy - box_s // 2, box_s, box_s), 1)
+            pygame.draw.rect(
+                target,
+                (glow, glow, glow),
+                (screen_x - box_s // 2, cy - box_s // 2, box_s, box_s),
+                1,
+            )
 
 
 _PICKUP_HALO_COLORS = (
-    (230, 200, 70),    # pistol  — brassy yellow
-    (220, 60, 40),     # shotgun — red
-    (180, 180, 200),   # gatling — cold steel
-    (255, 120, 40),    # rockets — orange
+    (230, 200, 70),  # pistol  — brassy yellow
+    (220, 60, 40),  # shotgun — red
+    (180, 180, 200),  # gatling — cold steel
+    (255, 120, 40),  # rockets — orange
 )
 
 
-def draw_weapon_pickups(screen: pygame.Surface, packs: list[Any],
-                        px: float, py: float, pa: float,
-                        z_buffer: DepthBuffer, eye_height: float = EYE_HEIGHT) -> None:
+def draw_weapon_pickups(
+    screen: pygame.Surface,
+    packs: list[WeaponPickup],
+    px: float,
+    py: float,
+    pa: float,
+    z_buffer: DepthBuffer,
+    eye_height: float = EYE_HEIGHT,
+) -> None:
     """Draw weapon pickups as floating gun silhouettes, each with a color-coded halo."""
     for pack in packs:
         if not pack.active:
@@ -540,12 +726,19 @@ def draw_weapon_pickups(screen: pygame.Surface, packs: list[Any],
             screen_x -= origin_x
             cy -= origin_y
             halo_surf = pygame.Surface((halo_r * 2, halo_r * 2), pygame.SRCALPHA)
-            pygame.draw.circle(halo_surf,
-                               (base[0], base[1], base[2], int(110 + pulse * 50)),
-                               (halo_r, halo_r), halo_r)
-            pygame.draw.circle(halo_surf,
-                               (base[0], base[1], base[2], int(60 + pulse * 40)),
-                               (halo_r, halo_r), halo_r, max(1, halo_r // 8))
+            pygame.draw.circle(
+                halo_surf,
+                (base[0], base[1], base[2], int(110 + pulse * 50)),
+                (halo_r, halo_r),
+                halo_r,
+            )
+            pygame.draw.circle(
+                halo_surf,
+                (base[0], base[1], base[2], int(60 + pulse * 40)),
+                (halo_r, halo_r),
+                halo_r,
+                max(1, halo_r // 8),
+            )
             target.blit(halo_surf, (screen_x - halo_r, cy - halo_r))
 
             if pack.weapon_type == 0:
@@ -558,11 +751,12 @@ def draw_weapon_pickups(screen: pygame.Surface, packs: list[Any],
                 _draw_rocket_icon(target, screen_x, cy, size, shade)
 
 
-def _shade(color: tuple[int, int, int], shade: float,
-           boost: float = 1.0) -> tuple[int, int, int]:
-    return (min(255, max(0, int(color[0] * shade * boost))),
-            min(255, max(0, int(color[1] * shade * boost))),
-            min(255, max(0, int(color[2] * shade * boost))))
+def _shade(color: tuple[int, int, int], shade: float, boost: float = 1.0) -> tuple[int, int, int]:
+    return (
+        min(255, max(0, int(color[0] * shade * boost))),
+        min(255, max(0, int(color[1] * shade * boost))),
+        min(255, max(0, int(color[2] * shade * boost))),
+    )
 
 
 def _draw_pistol_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade: float) -> None:
@@ -585,26 +779,26 @@ def _draw_pistol_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade
     pygame.draw.rect(screen, metal_dk, (x, y + slide_h - 1, w, 1))
     # muzzle hole at the front
     muzzle_w = max(2, size // 10)
-    pygame.draw.rect(screen, metal_dk,
-                     (x + w - muzzle_w, y + slide_h // 4,
-                      muzzle_w, max(1, slide_h // 2)))
+    pygame.draw.rect(
+        screen, metal_dk, (x + w - muzzle_w, y + slide_h // 4, muzzle_w, max(1, slide_h // 2))
+    )
 
     # Grip sits at the rear, hanging below the slide
     grip_w = max(int(w * 0.4), 3)
     grip_h = h - slide_h
     pygame.draw.rect(screen, wood, (x, y + slide_h, grip_w, grip_h))
     pygame.draw.rect(screen, wood_hi, (x, y + slide_h, max(1, grip_w // 4), grip_h))
-    pygame.draw.rect(screen, _shade((60, 40, 25), shade),
-                     (x + grip_w - 1, y + slide_h, 1, grip_h))
+    pygame.draw.rect(screen, _shade((60, 40, 25), shade), (x + grip_w - 1, y + slide_h, 1, grip_h))
 
     # Trigger + guard just ahead of the grip
     guard_w = max(int(w * 0.2), 2)
     guard_h = max(int(h * 0.22), 2)
-    pygame.draw.rect(screen, metal,
-                     (x + grip_w, y + slide_h, guard_w, max(2, guard_h // 2)))
-    pygame.draw.rect(screen, metal_dk,
-                     (x + grip_w + guard_w // 3, y + slide_h + 1,
-                      max(1, guard_w // 3), guard_h - 1))
+    pygame.draw.rect(screen, metal, (x + grip_w, y + slide_h, guard_w, max(2, guard_h // 2)))
+    pygame.draw.rect(
+        screen,
+        metal_dk,
+        (x + grip_w + guard_w // 3, y + slide_h + 1, max(1, guard_w // 3), guard_h - 1),
+    )
 
 
 def _draw_gatling_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade: float) -> None:
@@ -640,16 +834,14 @@ def _draw_gatling_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shad
     pygame.draw.circle(screen, steel, (bc_x, cy), bc_r)
     if bc_r >= 4:
         for ang in (0, math.pi / 2, math.pi, 3 * math.pi / 2, math.pi / 4):
-            dot = (int(bc_x + math.cos(ang) * bc_r * 0.55),
-                   int(cy + math.sin(ang) * bc_r * 0.55))
+            dot = (int(bc_x + math.cos(ang) * bc_r * 0.55), int(cy + math.sin(ang) * bc_r * 0.55))
             pygame.draw.circle(screen, steel_dk, dot, max(1, bc_r // 4))
 
     # Barrels poking forward
     barrels_w = int(w * 0.25)
     if barrels_w > 0:
         for off in (-bc_r // 2, 0, bc_r // 2):
-            pygame.draw.rect(screen, steel,
-                             (bc_x, cy + off - 1, barrels_w, 2))
+            pygame.draw.rect(screen, steel, (bc_x, cy + off - 1, barrels_w, 2))
 
 
 def _draw_shotgun_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade: float) -> None:
@@ -719,41 +911,53 @@ def _draw_rocket_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade
     # Warhead tip at the front
     tip_w = max(int(w * 0.12), 2)
     tip_x = tube_l - tip_w
-    pygame.draw.polygon(screen, warhead, [
-        (tip_x, y + 1),
-        (tip_x, y + h - 1),
-        (tip_x - tip_w, cy),
-    ])
+    pygame.draw.polygon(
+        screen,
+        warhead,
+        [
+            (tip_x, y + 1),
+            (tip_x, y + h - 1),
+            (tip_x - tip_w, cy),
+        ],
+    )
 
     # Rear exhaust cone
     cone_w = max(int(w * 0.15), 2)
     cone_x = tube_l + tube_w
-    pygame.draw.polygon(screen, tube_dk, [
-        (cone_x, y),
-        (cone_x + cone_w, y - max(1, h // 5)),
-        (cone_x + cone_w, y + h + max(1, h // 5)),
-        (cone_x, y + h),
-    ])
+    pygame.draw.polygon(
+        screen,
+        tube_dk,
+        [
+            (cone_x, y),
+            (cone_x + cone_w, y - max(1, h // 5)),
+            (cone_x + cone_w, y + h + max(1, h // 5)),
+            (cone_x, y + h),
+        ],
+    )
     pygame.draw.rect(screen, metal_dk, (cone_x + cone_w - 1, y, 1, h))
 
     # Sight on top
     sight_w = max(int(w * 0.14), 2)
     sight_h = max(int(h * 0.3), 2)
-    pygame.draw.rect(screen, metal_dk,
-                     (tube_l + tube_w // 3, y - sight_h, sight_w, sight_h))
+    pygame.draw.rect(screen, metal_dk, (tube_l + tube_w // 3, y - sight_h, sight_w, sight_h))
 
     # Grip underneath
     grip_w = max(int(w * 0.1), 2)
     grip_h = max(int(h * 0.6), 3)
-    pygame.draw.rect(screen, metal_dk,
-                     (tube_l + tube_w // 2, y + h, grip_w, grip_h))
+    pygame.draw.rect(screen, metal_dk, (tube_l + tube_w // 2, y + h, grip_w, grip_h))
 
 
-def draw_rockets(screen: pygame.Surface, rockets: list[Any],
-                 px: float, py: float, pa: float,
-                 z_buffer: DepthBuffer, eye_height: float = EYE_HEIGHT) -> None:
+def draw_rockets(
+    screen: pygame.Surface,
+    rockets: list[Rocket],
+    px: float,
+    py: float,
+    pa: float,
+    z_buffer: DepthBuffer,
+    eye_height: float = EYE_HEIGHT,
+) -> None:
     """Draw in-flight rockets and explosion bursts as billboard sprites."""
-    visible = []
+    visible: list[tuple[float, float, Rocket]] = []
     for r in rockets:
         if not r.alive:
             continue
@@ -801,10 +1005,12 @@ def draw_rockets(screen: pygame.Surface, rockets: list[Any],
                 center = (screen_x - visible_bounds.x, cy - visible_bounds.y)
                 surf = pygame.Surface(visible_bounds.size, pygame.SRCALPHA)
                 pygame.draw.circle(surf, (255, 90, 20, alpha_out), center, radius)
-                pygame.draw.circle(surf, (255, 170, 40, alpha_mid),
-                                   center, max(2, int(radius * 0.65)))
-                pygame.draw.circle(surf, (255, 240, 180, alpha_core),
-                                   center, max(1, int(radius * 0.32)))
+                pygame.draw.circle(
+                    surf, (255, 170, 40, alpha_mid), center, max(2, int(radius * 0.65))
+                )
+                pygame.draw.circle(
+                    surf, (255, 240, 180, alpha_core), center, max(1, int(radius * 0.32))
+                )
                 target.blit(surf, visible_bounds.topleft)
         else:
             # Rocket viewed from behind — player sees the engine bell surrounded
@@ -823,8 +1029,9 @@ def draw_rockets(screen: pygame.Surface, rockets: list[Any],
                 cy -= origin_y
                 glow = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
                 pygame.draw.circle(glow, (255, 110, 30, 80), (glow_r, glow_r), glow_r)
-                pygame.draw.circle(glow, (255, 160, 50, 130),
-                                   (glow_r, glow_r), max(2, int(glow_r * 0.65)))
+                pygame.draw.circle(
+                    glow, (255, 160, 50, 130), (glow_r, glow_r), max(2, int(glow_r * 0.65))
+                )
                 target.blit(glow, (screen_x - glow_r, cy - glow_r))
 
                 # Tail fins (4, cross layout) behind the body.
@@ -833,36 +1040,52 @@ def draw_rockets(screen: pygame.Surface, rockets: list[Any],
                 fin_col = (70, 70, 80)
                 fin_edge = (110, 110, 120)
                 # Horizontal fins
-                pygame.draw.rect(target, fin_col,
-                                 (screen_x - size // 2 - fin_len, cy - fin_thick // 2,
-                                  fin_len, fin_thick))
-                pygame.draw.rect(target, fin_col,
-                                 (screen_x + size // 2, cy - fin_thick // 2,
-                                  fin_len, fin_thick))
+                pygame.draw.rect(
+                    target,
+                    fin_col,
+                    (screen_x - size // 2 - fin_len, cy - fin_thick // 2, fin_len, fin_thick),
+                )
+                pygame.draw.rect(
+                    target, fin_col, (screen_x + size // 2, cy - fin_thick // 2, fin_len, fin_thick)
+                )
                 # Vertical fins
-                pygame.draw.rect(target, fin_col,
-                                 (screen_x - fin_thick // 2, cy - size // 2 - fin_len,
-                                  fin_thick, fin_len))
-                pygame.draw.rect(target, fin_col,
-                                 (screen_x - fin_thick // 2, cy + size // 2,
-                                  fin_thick, fin_len))
+                pygame.draw.rect(
+                    target,
+                    fin_col,
+                    (screen_x - fin_thick // 2, cy - size // 2 - fin_len, fin_thick, fin_len),
+                )
+                pygame.draw.rect(
+                    target, fin_col, (screen_x - fin_thick // 2, cy + size // 2, fin_thick, fin_len)
+                )
                 # Fin highlights
-                pygame.draw.line(target, fin_edge,
-                                 (screen_x - size // 2 - fin_len, cy),
-                                 (screen_x - size // 2, cy), 1)
-                pygame.draw.line(target, fin_edge,
-                                 (screen_x + size // 2, cy),
-                                 (screen_x + size // 2 + fin_len, cy), 1)
+                pygame.draw.line(
+                    target,
+                    fin_edge,
+                    (screen_x - size // 2 - fin_len, cy),
+                    (screen_x - size // 2, cy),
+                    1,
+                )
+                pygame.draw.line(
+                    target,
+                    fin_edge,
+                    (screen_x + size // 2, cy),
+                    (screen_x + size // 2 + fin_len, cy),
+                    1,
+                )
 
                 # Rocket body — circular cross-section seen end-on.
                 body_r = size // 2
                 pygame.draw.circle(target, (170, 170, 180), (screen_x, cy), body_r)
                 # Shading: lit from upper-left.
-                pygame.draw.circle(target, (210, 210, 220),
-                                   (screen_x - body_r // 3, cy - body_r // 3),
-                                   max(1, body_r // 2))
-                pygame.draw.circle(target, (120, 120, 130),
-                                   (screen_x, cy), body_r, max(1, body_r // 8))
+                pygame.draw.circle(
+                    target,
+                    (210, 210, 220),
+                    (screen_x - body_r // 3, cy - body_r // 3),
+                    max(1, body_r // 2),
+                )
+                pygame.draw.circle(
+                    target, (120, 120, 130), (screen_x, cy), body_r, max(1, body_r // 8)
+                )
 
                 # Engine bell — dark ring with a brighter interior (the flame).
                 bell_r = max(3, int(body_r * 0.6))
@@ -872,10 +1095,11 @@ def draw_rockets(screen: pygame.Surface, rockets: list[Any],
                 # Flame plume coming out of the bell toward the camera.
                 plume_r = max(2, int(bell_r * (0.75 + 0.25 * flicker)))
                 plume = pygame.Surface((plume_r * 2, plume_r * 2), pygame.SRCALPHA)
-                pygame.draw.circle(plume, (255, 180, 60, 230),
-                                   (plume_r, plume_r), plume_r)
-                pygame.draw.circle(plume, (255, 230, 140, 255),
-                                   (plume_r, plume_r), max(1, int(plume_r * 0.65)))
-                pygame.draw.circle(plume, (255, 255, 220, 255),
-                                   (plume_r, plume_r), max(1, int(plume_r * 0.3)))
+                pygame.draw.circle(plume, (255, 180, 60, 230), (plume_r, plume_r), plume_r)
+                pygame.draw.circle(
+                    plume, (255, 230, 140, 255), (plume_r, plume_r), max(1, int(plume_r * 0.65))
+                )
+                pygame.draw.circle(
+                    plume, (255, 255, 220, 255), (plume_r, plume_r), max(1, int(plume_r * 0.3))
+                )
                 target.blit(plume, (screen_x - plume_r, cy - plume_r))

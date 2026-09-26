@@ -3,7 +3,7 @@ Main game loop — initialization, input handling, game state updates, and draw 
 
 The game loop is split into focused functions so individual behaviors (movement,
 combat, doors, enemies, pickups, rendering) can be located and modified independently.
-All mutable state lives in the GameState object, initialized/reset via reset_game().
+Mutable gameplay state is owned by GameState, initialized/reset via reset_game().
 """
 
 from __future__ import annotations
@@ -12,47 +12,76 @@ import math
 import random
 import sys
 from collections.abc import Callable
-from typing import Any
 
 import pygame
 import pygame.freetype
 
-from shooter.types import DoorAnim, DoorAnimMap, Sfx, Textures
-from shooter.constants import (
-    WIDTH, HEIGHT, FPS, SAMPLE_RATE, EYE_HEIGHT,
-    WHITE, BLACK, RED, YELLOW,
-    PLAYER_MAX_HP,
-    PLAYER_MOVE_SPEED, PLAYER_ROT_SPEED, PLAYER_SPRINT_MULT, PLAYER_MARGIN,
-    MOUSE_SENSITIVITY,
-    JUMP_VELOCITY, GRAVITY,
-    INITIAL_AMMO, INITIAL_OWNED, MAX_AMMO, AMMO_INDEX, FIRE_RATES, WEAPON_NAMES, EMPTY_CLICK_DELAY,
-    DAMAGE_COOLDOWN_MS, PICKUP_RADIUS,
-    PISTOL_DAMAGE,
-    SHOTGUN_PELLETS, SHOTGUN_SPREAD, SHOTGUN_RANGE,
-    GATLING_SPREAD,
-    ROCKET_SPEED, ROCKET_HIT_RADIUS, ROCKET_BLAST_RADIUS, ROCKET_MAX_HITS,
-    ROCKET_SELF_DAMAGE, EXPLOSION_DURATION,
-    FOOTSTEP_WALK_INTERVAL, FOOTSTEP_SPRINT_INTERVAL,
-    DOOR_OPEN_DURATION, DOOR_RETRY_DELAY, DOOR_ANIM_DURATION,
-    SPAWN_REGULAR_COUNT, SPAWN_SCOUT_COUNT, SPAWN_SPIDER_COUNT,
-)
 from shooter import map as gmap
-from shooter.map import (
-    MAZE, DOOR_TILE, BARRIER_TILE,
-    tile_at, is_blocked, blocks_sight, find_door_in_front, has_line_of_sight,
+from shooter.constants import (
+    BLACK,
+    DAMAGE_COOLDOWN_MS,
+    DOOR_ANIM_DURATION,
+    DOOR_OPEN_DURATION,
+    DOOR_RETRY_DELAY,
+    EMPTY_CLICK_DELAY,
+    EXPLOSION_DURATION,
+    EYE_HEIGHT,
+    FOOTSTEP_SPRINT_INTERVAL,
+    FOOTSTEP_WALK_INTERVAL,
+    FPS,
+    GATLING_SPREAD,
+    GRAVITY,
+    HEIGHT,
+    INITIAL_AMMO,
+    JUMP_VELOCITY,
+    MAX_AMMO,
+    MOUSE_SENSITIVITY,
+    PICKUP_RADIUS,
+    PISTOL_DAMAGE,
+    PLAYER_MARGIN,
+    PLAYER_MAX_HP,
+    PLAYER_MOVE_SPEED,
+    PLAYER_ROT_SPEED,
+    PLAYER_SPRINT_MULT,
+    RED,
+    ROCKET_BLAST_RADIUS,
+    ROCKET_HIT_RADIUS,
+    ROCKET_MAX_HITS,
+    ROCKET_SELF_DAMAGE,
+    ROCKET_SPEED,
+    SAMPLE_RATE,
+    SHOTGUN_PELLETS,
+    SHOTGUN_RANGE,
+    SHOTGUN_SPREAD,
+    SPAWN_REGULAR_COUNT,
+    SPAWN_SCOUT_COUNT,
+    SPAWN_SPIDER_COUNT,
+    WEAPONS,
+    WHITE,
+    WIDTH,
+    YELLOW,
 )
-from shooter.sound import init_sounds
-from shooter.textures import generate_textures, generate_icon
 from shooter.entities import (
-    Boss, Enemy, HealthPack, Rocket, WeaponPickup,
-    spawn_enemies, spawn_health_packs, spawn_weapon_pickups,
-    hitscan, apply_hit,
+    Boss,
+    Enemy,
+    HealthPack,
+    Rocket,
+    WeaponPickup,
+    apply_hit,
+    hitscan,
+    spawn_enemies,
+    spawn_health_packs,
+    spawn_weapon_pickups,
 )
-from shooter.raycaster import cast_rays
+from shooter.map import BARRIER_TILE, DOOR_TILE, LevelState
 from shooter.occlusion import DepthBuffer
-from shooter.render_world import draw_floor_ceiling, draw_3d
+from shooter.raycaster import cast_rays
 from shooter.render_sprites import Billboard, draw_world_sprites
-from shooter.render_ui import draw_minimap, draw_crosshair, draw_hud
+from shooter.render_ui import draw_crosshair, draw_hud, draw_minimap
+from shooter.render_world import draw_3d, draw_floor_ceiling
+from shooter.sound import init_sounds
+from shooter.textures import generate_icon, generate_textures
+from shooter.types import DoorAnim, DoorAnimMap, KeyState, Sfx, Textures
 from shooter.weapons import draw_weapon
 
 
@@ -81,9 +110,9 @@ class GameState:
             damage_cooldown -- ms of i-frames remaining after taking a hit.
             kills           -- enemies killed this level (drives HUD "X / Y").
 
-        Weapons (see constants.WEAPON_NAMES for indices)
+        Weapons (see constants.WEAPONS for indices)
             weapon       -- currently equipped weapon index (0..4).
-            ammo         -- per-pool ammo counts; index via AMMO_INDEX[weapon].
+            ammo         -- per-pool ammo counts; index via WEAPONS[weapon].ammo_pool.
             owned        -- which weapons the player has picked up.
             shooting     -- True while the firing animation is playing.
             shoot_timer  -- ms until the next shot is allowed (ROF gate).
@@ -95,6 +124,9 @@ class GameState:
             step_timer, step_index -- alternates step0/step1 sounds on move.
 
         World
+            world      -- owned LevelState: maze, doors, exit, and spawn positions.
+            level_rng  -- generation/spawning RNG, independent of gameplay and assets.
+            rng        -- combat spread RNG, independent of subsequent levels.
             game_time  -- seconds elapsed; used for idle-sway animations.
             game_over  -- True after death; main loop skips updates.
             paused     -- True while the pause screen is up; main loop skips updates.
@@ -113,14 +145,19 @@ class GameState:
             rockets        -- in-flight rocket projectiles.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        self.seed = seed
         self.reset()
 
     def reset(self) -> None:
         """Set every field to its starting value. Does NOT generate a level."""
+        self.level_rng = random.Random(self.seed)
+        self.rng = random.Random(self.seed)
+        self.world = LevelState()
+
         # Player position & physics
-        self.px = gmap.PLAYER_SPAWN[0]
-        self.py = gmap.PLAYER_SPAWN[1]
+        self.px = self.world.player_spawn[0]
+        self.py = self.world.player_spawn[1]
         self.pa = 0.0
         self.jump_vel = 0.0
         self.jump_height = 0.0
@@ -133,8 +170,8 @@ class GameState:
 
         # Weapons
         self.weapon = 0
-        self.ammo = list(INITIAL_AMMO)
-        self.owned = list(INITIAL_OWNED)
+        self.ammo: list[int] = list(INITIAL_AMMO)
+        self.owned = [weapon.initially_owned for weapon in WEAPONS]
         self.shooting = False
         self.shoot_timer = 0
         self.mouse_held = False
@@ -173,14 +210,14 @@ class GameState:
 def start_level(state: GameState, level: int) -> None:
     """Generate a new procedural level and (re)spawn all entities.
 
-    Preserves the player's HP, ammo, weapon, and kills so progression carries over.
+    Preserves ammo and owned/equipped weapons; refills HP and resets level kills.
     Enemy counts scale modestly with level number.
     """
-    gmap.generate_level(level)
+    state.world = gmap.generate_level(level, state.level_rng)
 
     # Reposition player to the fresh spawn and clear per-level transient state.
-    state.px = gmap.PLAYER_SPAWN[0]
-    state.py = gmap.PLAYER_SPAWN[1]
+    state.px = state.world.player_spawn[0]
+    state.py = state.world.player_spawn[1]
     state.pa = 0.0
     state.jump_vel = 0.0
     state.jump_height = 0.0
@@ -193,22 +230,28 @@ def start_level(state: GameState, level: int) -> None:
 
     # Difficulty scaling: +1 of each enemy type per level.
     bonus = level - 1
-    boss_tile = (int(gmap.BOSS_SPAWN[0]), int(gmap.BOSS_SPAWN[1]))
-    used_tiles: set[tuple[int, int]] = set()
+    boss_tile = (int(state.world.boss_spawn[0]), int(state.world.boss_spawn[1]))
+    # Reserve the boss and all supplies before enemies consume the free cells.
+    used_tiles: set[tuple[int, int]] = {boss_tile}
+    state.health_packs = spawn_health_packs(state.world, state.level_rng, used_tiles)
+    state.weapon_pickups = spawn_weapon_pickups(state.world, state.level_rng, used_tiles)
     state.enemies = spawn_enemies(
+        state.world,
+        state.level_rng,
         used_tiles,
         regular_count=SPAWN_REGULAR_COUNT + bonus,
         scout_count=SPAWN_SCOUT_COUNT + bonus,
         spider_count=SPAWN_SPIDER_COUNT + bonus,
         boss_tile=boss_tile,
     )
-    state.boss = Boss(gmap.BOSS_SPAWN[0], gmap.BOSS_SPAWN[1])
+    state.boss = Boss(*state.world.boss_spawn, random.Random(state.level_rng.getrandbits(64)))
     state.enemies.append(state.boss)
     used_tiles.add(boss_tile)
     state.total_enemies = len(state.enemies)
-    state.health_packs = spawn_health_packs(used_tiles)
-    state.weapon_pickups = spawn_weapon_pickups(used_tiles)
     state.rockets = []
+    state.gatling_spin = 0.0
+    state.gatling_speed = 0.0
+    state.step_timer = 0
 
     state.hp = PLAYER_MAX_HP  # refill health on each new level
     state.level = level
@@ -226,8 +269,7 @@ def reset_game(state: GameState) -> None:
 # ---------------------------------------------------------------------------
 # Event handling
 # ---------------------------------------------------------------------------
-def handle_events(state: GameState, sfx: Sfx,
-                  pressed_scancodes: set[int]) -> bool:
+def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bool:
     """Process all pygame events. Returns False if the game should quit."""
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -251,8 +293,13 @@ def handle_events(state: GameState, sfx: Sfx,
                 reset_game(state)
             # Reset the fire cooldown only on an actual switch — re-pressing the
             # equipped weapon's key must not zero shoot_timer (rate-of-fire bypass).
-            weapon_keys = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2,
-                           pygame.K_4: 3, pygame.K_0: 4}
+            weapon_keys = {
+                pygame.K_1: 0,
+                pygame.K_2: 1,
+                pygame.K_3: 2,
+                pygame.K_4: 3,
+                pygame.K_0: 4,
+            }
             if event.key in weapon_keys and not state.game_over:
                 new_weapon = weapon_keys[event.key]
                 if state.owned[new_weapon] and state.weapon != new_weapon:
@@ -260,12 +307,14 @@ def handle_events(state: GameState, sfx: Sfx,
                     state.shoot_timer = 0
                     state.shooting = False
             if event.scancode == pygame.KSCAN_E and not state.game_over:
-                door_pos = find_door_in_front(state.px, state.py, state.pa)
+                door_pos = state.world.find_door_in_front(state.px, state.py, state.pa)
                 if door_pos and door_pos not in state.door_anim:
                     state.door_anim[door_pos] = DoorAnim(
-                        phase='opening', progress=0.0, timer=0,
+                        phase="opening",
+                        progress=0.0,
+                        timer=0,
                     )
-                    sfx['door_open'].play()
+                    sfx["door_open"].play()
         elif event.type == pygame.KEYUP:
             pressed_scancodes.discard(event.scancode)
         elif event.type == pygame.WINDOWFOCUSLOST:
@@ -293,58 +342,64 @@ def _pause(state: GameState, pressed_scancodes: set[int]) -> None:
     pressed_scancodes.clear()
 
 
+def _begin_shot(state: GameState, sfx: Sfx) -> bool:
+    """Gate every weapon and consume its ammo/cooldown in one place."""
+    if (
+        state.game_over
+        or state.paused
+        or state.hp <= 0
+        or not state.owned[state.weapon]
+        or state.shoot_timer > 0
+    ):
+        return False
+    weapon = WEAPONS[state.weapon]
+    if state.ammo[weapon.ammo_pool] <= 0:
+        sfx["empty"].play()
+        state.shoot_timer = EMPTY_CLICK_DELAY
+        return False
+    state.ammo[weapon.ammo_pool] -= 1
+    state.shoot_timer = weapon.fire_interval_ms
+    state.shooting = True
+    return True
+
+
 def _handle_click_fire(state: GameState, sfx: Sfx) -> None:
-    """Fire single-shot weapons (pistol / shotgun) on mouse click."""
-    if state.weapon == 0 and state.ammo[AMMO_INDEX[0]] > 0 and state.shoot_timer <= 0:
-        state.shooting = True
-        state.shoot_timer = FIRE_RATES[0]
-        state.ammo[AMMO_INDEX[0]] -= 1
-        sfx['pistol'].play()
-        target = hitscan(state.enemies, state.px, state.py, state.pa)
-        if target:
-            killed = False
-            for _ in range(PISTOL_DAMAGE):
-                if not target.alive:
-                    break
-                if apply_hit(target, sfx):
-                    killed = True
-            if killed:
-                state.kills += 1
-    if state.weapon == 1 and state.ammo[AMMO_INDEX[1]] > 0 and state.shoot_timer <= 0:
-        state.shooting = True
-        state.shoot_timer = FIRE_RATES[1]
-        state.ammo[AMMO_INDEX[1]] -= 1
-        sfx['shotgun'].play()
+    """Fire click-operated weapons, respecting ownership, ammo, and cooldown."""
+    if state.weapon == 2 or not _begin_shot(state, sfx):
+        return
+    if state.weapon == 0:
+        sfx["pistol"].play()
+        target = hitscan(state.world, state.enemies, state.px, state.py, state.pa)
+        if target and apply_hit(target, sfx, PISTOL_DAMAGE):
+            state.kills += 1
+    elif state.weapon == 1:
+        sfx["shotgun"].play()
         for _ in range(SHOTGUN_PELLETS):
-            spread = random.uniform(-SHOTGUN_SPREAD, SHOTGUN_SPREAD)
-            target = hitscan(state.enemies, state.px, state.py, state.pa,
-                             spread=spread, max_range=SHOTGUN_RANGE)
+            spread = state.rng.uniform(-SHOTGUN_SPREAD, SHOTGUN_SPREAD)
+            target = hitscan(
+                state.world,
+                state.enemies,
+                state.px,
+                state.py,
+                state.pa,
+                spread=spread,
+                max_range=SHOTGUN_RANGE,
+            )
             if target and apply_hit(target, sfx):
                 state.kills += 1
-    if state.weapon == 3 and state.ammo[AMMO_INDEX[3]] > 0 and state.shoot_timer <= 0:
-        state.shooting = True
-        state.shoot_timer = FIRE_RATES[3]
-        state.ammo[AMMO_INDEX[3]] -= 1
-        sfx['rocket_fire'].play()
-        # Spawn rocket a little in front of the player so it can't detonate on us immediately.
-        spawn_x = state.px + math.cos(state.pa) * 0.4
-        spawn_y = state.py + math.sin(state.pa) * 0.4
-        state.rockets.append(Rocket(spawn_x, spawn_y, state.pa))
-    if state.weapon == 4 and state.ammo[AMMO_INDEX[4]] > 0 and state.shoot_timer <= 0:
-        state.shooting = True
-        state.shoot_timer = FIRE_RATES[4]
-        state.ammo[AMMO_INDEX[4]] -= 1
-        sfx['explosion'].play()
+    elif state.weapon == 3:
+        sfx["rocket_fire"].play()
+        rocket = Rocket(state.px, state.py, state.pa)
+        state.rockets.append(rocket)
+        # Sweep the muzzle offset too: a close wall must detonate on our side.
+        _move_rocket(state, rocket, 0.4, sfx)
+    elif state.weapon == 4:
+        sfx["explosion"].play()
         for e in state.enemies:
             if not e.alive or e.is_boss:
                 continue
-            while e.alive:
-                e.take_damage()
-            sfx['spider_die' if e.is_spider else 'enemy_die'].play()
-            state.kills += 1
-    if state.ammo[AMMO_INDEX[state.weapon]] <= 0 and state.shoot_timer <= 0:
-        sfx['empty'].play()
-        state.shoot_timer = EMPTY_CLICK_DELAY
+            if apply_hit(e, sfx, e.hp):
+                state.kills += 1
 
 
 # ---------------------------------------------------------------------------
@@ -372,15 +427,15 @@ def _advance(pos: float, delta: float, blocked: Callable[[float], bool]) -> floa
     return pos
 
 
-def update_player(state: GameState, dt: int, keys: Any,
-                  pressed_scancodes: set[int],
-                  sfx: Sfx) -> bool:
+def update_player(
+    state: GameState, dt: int, keys: KeyState, pressed_scancodes: set[int], sfx: Sfx
+) -> bool:
     """Handle movement, jumping, and footstep sounds. Returns True if the player moved."""
     if keys[pygame.K_LEFT]:
         state.pa -= PLAYER_ROT_SPEED * dt
     if keys[pygame.K_RIGHT]:
         state.pa += PLAYER_ROT_SPEED * dt
-    state.pa %= (2 * math.pi)
+    state.pa %= 2 * math.pi
 
     move = 0
     strafe = 0
@@ -406,12 +461,13 @@ def update_player(state: GameState, dt: int, keys: Any,
     if dx != 0 or dy != 0:
         # Landing on a barrier's edge leaves the player standing on it, free to step off.
         on_barrier = state.jump_height < 0.3 and _footprint_hits(
-            state.px, state.py, lambda x, y: tile_at(x, y) == BARRIER_TILE)
+            state.px, state.py, lambda x, y: state.world.tile_at(x, y) == BARRIER_TILE
+        )
         jh = 1.0 if on_barrier else state.jump_height
         exit_open = state.exit_open
 
         def solid(x: float, y: float) -> bool:
-            return is_blocked(x, y, jh, exit_open)
+            return state.world.is_blocked(x, y, jh, exit_open)
 
         state.px = _advance(state.px, dx, lambda x: _footprint_hits(x, state.py, solid))
         state.py = _advance(state.py, dy, lambda y: _footprint_hits(state.px, y, solid))
@@ -426,11 +482,11 @@ def update_player(state: GameState, dt: int, keys: Any,
         state.jump_vel = 0
         state.on_ground = True
 
-    player_moved = (state.px != old_px or state.py != old_py)
+    player_moved = state.px != old_px or state.py != old_py
     if player_moved and state.on_ground:
         state.step_timer -= dt
         if state.step_timer <= 0:
-            sfx[f'step{state.step_index}'].play()
+            sfx[f"step{state.step_index}"].play()
             state.step_index = 1 - state.step_index
             state.step_timer = FOOTSTEP_SPRINT_INTERVAL if sprinting else FOOTSTEP_WALK_INTERVAL
     state.game_time += dt * 0.001
@@ -438,8 +494,7 @@ def update_player(state: GameState, dt: int, keys: Any,
     return player_moved
 
 
-def update_combat(state: GameState, dt: int,
-                  sfx: Sfx) -> None:
+def update_combat(state: GameState, dt: int, sfx: Sfx) -> None:
     """Handle shoot timer and gatling auto-fire."""
     if state.shoot_timer > 0:
         state.shoot_timer -= dt
@@ -448,86 +503,92 @@ def update_combat(state: GameState, dt: int,
 
     if state.weapon == 2 and state.mouse_held and not state.game_over:
         state.gatling_speed = 0.08
-        if state.shoot_timer <= 0 and state.ammo[AMMO_INDEX[2]] > 0:
-            state.shooting = True
-            state.shoot_timer = FIRE_RATES[2]
-            state.ammo[AMMO_INDEX[2]] -= 1
-            sfx['gatling'].play()
-            target = hitscan(state.enemies, state.px, state.py, state.pa,
-                             spread=random.uniform(-GATLING_SPREAD, GATLING_SPREAD))
+        if _begin_shot(state, sfx):
+            sfx["gatling"].play()
+            target = hitscan(
+                state.world,
+                state.enemies,
+                state.px,
+                state.py,
+                state.pa,
+                spread=state.rng.uniform(-GATLING_SPREAD, GATLING_SPREAD),
+            )
             if target and apply_hit(target, sfx):
                 state.kills += 1
-        elif state.shoot_timer <= 0 and state.ammo[AMMO_INDEX[2]] <= 0:
-            sfx['empty'].play()
-            state.shoot_timer = EMPTY_CLICK_DELAY
     else:
         # Released barrels coast to a stop over 400 ms instead of unwinding.
         state.gatling_speed = max(0.0, state.gatling_speed - dt * 0.0002)
     state.gatling_spin = (state.gatling_spin + state.gatling_speed * dt) % (2 * math.pi)
 
 
-def update_doors(state: GameState, dt: int,
-                 sfx: Sfx) -> None:
+def update_doors(state: GameState, dt: int, sfx: Sfx) -> None:
     """Advance door animations through opening -> open -> closing phases."""
     anim_step = dt / DOOR_ANIM_DURATION
-    to_remove = []
+    to_remove: list[tuple[int, int]] = []
     for (dc, dr), anim in state.door_anim.items():
-        phase = anim['phase']
-        if phase == 'opening':
-            anim['progress'] += anim_step
-            if anim['progress'] >= 1.0:
-                anim['progress'] = 1.0
-                MAZE[dr][dc] = 0
-                anim['phase'] = 'open'
-                anim['timer'] = DOOR_OPEN_DURATION
-        elif phase == 'open':
-            anim['timer'] -= dt
-            if anim['timer'] <= 0:
+        phase = anim["phase"]
+        if phase == "opening":
+            anim["progress"] += anim_step
+            if anim["progress"] >= 1.0:
+                anim["progress"] = 1.0
+                state.world.maze[dr][dc] = 0
+                anim["phase"] = "open"
+                anim["timer"] = DOOR_OPEN_DURATION
+        elif phase == "open":
+            anim["timer"] -= dt
+            if anim["timer"] <= 0:
                 # Any overlap with the player's footprint keeps the door open.
-                occupied = _footprint_hits(state.px, state.py,
-                                           lambda x, y: (int(x), int(y)) == (dc, dr))
+                occupied = _footprint_hits(
+                    state.px, state.py, lambda x, y, dc=dc, dr=dr: (int(x), int(y)) == (dc, dr)
+                )
                 if not occupied:
                     for e in state.enemies:
                         if e.alive and int(e.x) == dc and int(e.y) == dr:
                             occupied = True
                             break
                 if not occupied:
-                    MAZE[dr][dc] = DOOR_TILE
-                    anim['phase'] = 'closing'
-                    sfx['door_close'].play()
+                    state.world.maze[dr][dc] = DOOR_TILE
+                    anim["phase"] = "closing"
+                    sfx["door_close"].play()
                 else:
-                    anim['timer'] = DOOR_RETRY_DELAY
-        elif phase == 'closing':
-            anim['progress'] -= anim_step
-            if anim['progress'] <= 0.0:
+                    anim["timer"] = DOOR_RETRY_DELAY
+        elif phase == "closing":
+            anim["progress"] -= anim_step
+            if anim["progress"] <= 0.0:
                 to_remove.append((dc, dr))
     for key in to_remove:
         del state.door_anim[key]
 
 
-def update_enemies(state: GameState, dt: int,
-                   sfx: Sfx) -> None:
+def update_enemies(state: GameState, dt: int, sfx: Sfx) -> None:
     """Run enemy AI and apply enemy attacks to the player."""
     if state.damage_cooldown > 0:
         state.damage_cooldown -= dt
     if state.spawn_grace > 0:
         state.spawn_grace -= dt
     for e in state.enemies:
-        e.update(state.px, state.py, dt)
+        e.update(state.world, state.px, state.py, dt)
         if e.alive and state.hp > 0 and state.damage_cooldown <= 0 and state.spawn_grace <= 0:
             dist = math.hypot(e.x - state.px, e.y - state.py)
-            if dist < e.attack_range and e.attack_cooldown <= 0 and has_line_of_sight(e.x, e.y, state.px, state.py):
+            if (
+                dist < e.attack_range
+                and e.attack_cooldown <= 0
+                and state.world.has_line_of_sight(e.x, e.y, state.px, state.py)
+            ):
                 state.hp -= e.damage
                 e.attack_cooldown = e.attack_cooldown_duration
                 state.damage_cooldown = DAMAGE_COOLDOWN_MS
-                sfx['boss_roar' if e.is_boss else ('spider_hiss' if e.is_spider else 'enemy_attack')].play()
+                sfx[
+                    "boss_roar" if e.is_boss else ("spider_hiss" if e.is_spider else "enemy_attack")
+                ].play()
                 if state.hp <= 0:
                     break
 
 
-def update_pickups(state: GameState, dt: int,
-                   sfx: Sfx) -> None:
+def update_pickups(state: GameState, dt: int, sfx: Sfx) -> None:
     """Update pickup animations and check for player collection."""
+    if state.hp <= 0:
+        return
     for hp_pack in state.health_packs:
         if not hp_pack.active:
             continue
@@ -536,7 +597,7 @@ def update_pickups(state: GameState, dt: int,
         if dist < PICKUP_RADIUS and state.hp < PLAYER_MAX_HP:
             hp_pack.active = False
             state.hp = min(PLAYER_MAX_HP, state.hp + hp_pack.heal_amount)
-            sfx['pickup'].play()
+            sfx["pickup"].play()
 
     for pack in state.weapon_pickups:
         if not pack.active:
@@ -546,27 +607,90 @@ def update_pickups(state: GameState, dt: int,
         if dist >= PICKUP_RADIUS:
             continue
         wt = pack.weapon_type
-        ai = AMMO_INDEX[wt]
+        ai = WEAPONS[wt].ammo_pool
         if not state.owned[wt]:
             # First time: unlock the weapon and hand over the starter ammo.
             state.owned[wt] = True
-            state.ammo[ai] = min(state.ammo[ai] + pack.amounts[wt], MAX_AMMO[ai])
+            state.ammo[ai] = min(state.ammo[ai] + WEAPONS[wt].pickup_ammo, MAX_AMMO[ai])
             # Auto-switch if the new weapon outranks what we're holding.
             if wt > state.weapon:
                 state.weapon = wt
                 state.shoot_timer = 0
                 state.shooting = False
             pack.active = False
-            sfx['pickup'].play()
+            sfx["pickup"].play()
         elif state.ammo[ai] < MAX_AMMO[ai]:
-            state.ammo[ai] = min(state.ammo[ai] + pack.amounts[wt], MAX_AMMO[ai])
+            state.ammo[ai] = min(state.ammo[ai] + WEAPONS[wt].pickup_ammo, MAX_AMMO[ai])
             pack.active = False
-            sfx['pickup'].play()
+            sfx["pickup"].play()
 
 
-def update_rockets(state: GameState, dt: int,
-                   sfx: Sfx) -> None:
-    """Advance in-flight rockets, detonate on contact, apply splash damage."""
+def _detonate_rocket(state: GameState, rocket: Rocket, sfx: Sfx) -> None:
+    """Apply each explosion once, using the same damage rules as hitscan."""
+    if rocket.exploded:
+        return
+    rocket.exploded = True
+    rocket.explosion_timer = EXPLOSION_DURATION
+    sfx["explosion"].play()
+    for enemy in state.enemies:
+        if not enemy.alive:
+            continue
+        distance = math.hypot(enemy.x - rocket.x, enemy.y - rocket.y)
+        if distance >= ROCKET_BLAST_RADIUS or not state.world.has_line_of_sight(
+            rocket.x, rocket.y, enemy.x, enemy.y
+        ):
+            continue
+        damage = max(1, int(ROCKET_MAX_HITS * (1.0 - distance / ROCKET_BLAST_RADIUS)))
+        if apply_hit(enemy, sfx, damage):
+            state.kills += 1
+    distance = math.hypot(state.px - rocket.x, state.py - rocket.y)
+    if (
+        distance < ROCKET_BLAST_RADIUS
+        and state.damage_cooldown <= 0
+        and state.world.has_line_of_sight(rocket.x, rocket.y, state.px, state.py)
+    ):
+        damage = int(ROCKET_SELF_DAMAGE * (1.0 - distance / ROCKET_BLAST_RADIUS))
+        if damage > 0:
+            state.hp -= damage
+            state.damage_cooldown = DAMAGE_COOLDOWN_MS
+
+
+def _move_rocket(state: GameState, rocket: Rocket, distance: float, sfx: Sfx) -> None:
+    """Sweep a projectile segment and stop at its earliest wall or enemy contact."""
+    if rocket.exploded or distance <= 0:
+        return
+    cos_a, sin_a = math.cos(rocket.angle), math.sin(rocket.angle)
+    nx, ny = rocket.x + cos_a * distance, rocket.y + sin_a * distance
+    fraction = state.world.wall_hit_fraction(rocket.x, rocket.y, nx, ny)
+    hit_distance = distance if fraction is None else fraction * distance
+    hit_wall = fraction is not None
+    detonate = hit_wall
+    for enemy in state.enemies:
+        if not enemy.alive:
+            continue
+        dx, dy = enemy.x - rocket.x, enemy.y - rocket.y
+        along = dx * cos_a + dy * sin_a
+        across = abs(dy * cos_a - dx * sin_a)
+        if across >= ROCKET_HIT_RADIUS:
+            continue
+        half_chord = math.sqrt(ROCKET_HIT_RADIUS**2 - across**2)
+        if along + half_chord < 0:
+            continue
+        contact = max(0.0, along - half_chord)
+        if contact < hit_distance or (contact == hit_distance and not hit_wall):
+            hit_distance = contact
+            hit_wall = False
+            detonate = True
+    # Keep wall impacts just inside the last clear space for visibility and splash LOS.
+    travel = max(0.0, hit_distance - 1e-6) if hit_wall else hit_distance
+    rocket.x += cos_a * travel
+    rocket.y += sin_a * travel
+    if detonate:
+        _detonate_rocket(state, rocket, sfx)
+
+
+def update_rockets(state: GameState, dt: int, sfx: Sfx) -> None:
+    """Advance projectiles and age explosion visuals."""
     for rocket in state.rockets:
         if not rocket.alive:
             continue
@@ -575,66 +699,32 @@ def update_rockets(state: GameState, dt: int,
             if rocket.explosion_timer <= 0:
                 rocket.alive = False
             continue
-
         rocket.trail_phase += dt * 0.02
-        step = ROCKET_SPEED * dt
-        nx = rocket.x + math.cos(rocket.angle) * step
-        ny = rocket.y + math.sin(rocket.angle) * step
+        _move_rocket(state, rocket, ROCKET_SPEED * dt, sfx)
+    state.rockets = [rocket for rocket in state.rockets if rocket.alive]
 
-        detonate = False
-        # Rockets fly at eye level, over barriers.
-        if blocks_sight(nx, ny):
-            # Stop just outside the wall so the explosion sprite doesn't disappear.
-            rocket.x -= math.cos(rocket.angle) * 0.05
-            rocket.y -= math.sin(rocket.angle) * 0.05
-            detonate = True
-        else:
-            rocket.x = nx
-            rocket.y = ny
-            for e in state.enemies:
-                if e.alive and math.hypot(e.x - rocket.x, e.y - rocket.y) < ROCKET_HIT_RADIUS:
-                    detonate = True
-                    break
 
-        if detonate:
-            rocket.exploded = True
-            rocket.explosion_timer = EXPLOSION_DURATION
-            sfx['explosion'].play()
-            # Splash damage to enemies (closer = more take_damage() calls).
-            for e in state.enemies:
-                if not e.alive:
-                    continue
-                d = math.hypot(e.x - rocket.x, e.y - rocket.y)
-                if d >= ROCKET_BLAST_RADIUS:
-                    continue
-                if not has_line_of_sight(rocket.x, rocket.y, e.x, e.y):
-                    continue
-                falloff = 1.0 - (d / ROCKET_BLAST_RADIUS)
-                hits = max(1, int(ROCKET_MAX_HITS * falloff))
-                killed = False
-                for _ in range(hits):
-                    if not e.alive:
-                        break
-                    e.take_damage()
-                    if not e.alive:
-                        killed = True
-                if killed:
-                    sfx['boss_die' if e.is_boss else
-                        ('spider_die' if e.is_spider else 'enemy_die')].play()
-                    state.kills += 1
-                else:
-                    sfx['enemy_hurt'].play()
-            # Splash damage to the player — rockets hurt the one firing them too.
-            pd = math.hypot(state.px - rocket.x, state.py - rocket.y)
-            if (pd < ROCKET_BLAST_RADIUS and state.damage_cooldown <= 0
-                    and has_line_of_sight(rocket.x, rocket.y, state.px, state.py)):
-                falloff = 1.0 - (pd / ROCKET_BLAST_RADIUS)
-                self_damage = int(ROCKET_SELF_DAMAGE * falloff)
-                if self_damage > 0:
-                    state.hp -= self_damage
-                    state.damage_cooldown = DAMAGE_COOLDOWN_MS
-
-    state.rockets = [r for r in state.rockets if r.alive]
+def update_game(
+    state: GameState, dt: int, keys: KeyState, pressed_scancodes: set[int], sfx: Sfx
+) -> bool:
+    """Advance one simulation frame; lethal damage takes precedence over pickups."""
+    if state.paused or state.game_over:
+        return False
+    if state.hp <= 0:
+        check_win_lose(state)
+        return False
+    moved = update_player(state, dt, keys, pressed_scancodes, sfx)
+    update_combat(state, dt, sfx)
+    update_doors(state, dt, sfx)
+    update_enemies(state, dt, sfx)
+    if state.hp > 0:
+        update_rockets(state, dt, sfx)
+    if state.hp > 0:
+        update_pickups(state, dt, sfx)
+    check_win_lose(state)
+    if state.level_banner_timer > 0:
+        state.level_banner_timer -= dt
+    return moved
 
 
 def check_win_lose(state: GameState) -> None:
@@ -642,7 +732,11 @@ def check_win_lose(state: GameState) -> None:
     if state.hp <= 0:
         state.game_over = True
         return
-    if int(state.px) == gmap.EXIT_X and int(state.py) == gmap.EXIT_Y and state.exit_open:
+    if (
+        int(state.px) == state.world.exit_pos[0]
+        and int(state.py) == state.world.exit_pos[1]
+        and state.exit_open
+    ):
         # Advance to the next randomly-generated level. Ammo and weapons carry
         # over; HP refills (see start_level).
         start_level(state, state.level + 1)
@@ -651,19 +745,26 @@ def check_win_lose(state: GameState) -> None:
 # ---------------------------------------------------------------------------
 # Drawing
 # ---------------------------------------------------------------------------
-def draw_game_over(screen: pygame.Surface, state: GameState,
-                   font: Any, big_font: Any) -> None:
+def draw_game_over(
+    screen: pygame.Surface,
+    state: GameState,
+    font: pygame.freetype.Font,
+    big_font: pygame.freetype.Font,
+) -> None:
     """Render the game-over screen (death only — wins now advance levels)."""
     screen.fill(BLACK)
     msg, _ = big_font.render("GAME OVER", RED)
     screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, HEIGHT // 2 - 40))
     sub, _ = font.render(
         f"Reached Level {state.level}  -  Kills: {state.kills}/{state.total_enemies}  -  Press R to restart  -  ESC to quit",
-        WHITE)
+        WHITE,
+    )
     screen.blit(sub, (WIDTH // 2 - sub.get_width() // 2, HEIGHT // 2 + 30))
 
 
-def draw_level_banner(screen: pygame.Surface, state: GameState, big_font: Any) -> None:
+def draw_level_banner(
+    screen: pygame.Surface, state: GameState, big_font: pygame.freetype.Font
+) -> None:
     """Draw a brief 'LEVEL N' banner that fades out over ~1.2s."""
     if state.level_banner_timer <= 0:
         return
@@ -679,7 +780,9 @@ def draw_level_banner(screen: pygame.Surface, state: GameState, big_font: Any) -
     screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, HEIGHT // 2 - msg.get_height() // 2))
 
 
-def draw_pause_overlay(screen: pygame.Surface, font: Any, big_font: Any) -> None:
+def draw_pause_overlay(
+    screen: pygame.Surface, font: pygame.freetype.Font, big_font: pygame.freetype.Font
+) -> None:
     """Dim the frozen frame and show how to resume or quit."""
     dim = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
     dim.fill((0, 0, 0, 150))
@@ -690,30 +793,69 @@ def draw_pause_overlay(screen: pygame.Surface, font: Any, big_font: Any) -> None
     screen.blit(sub, (WIDTH // 2 - sub.get_width() // 2, HEIGHT // 2 + 30))
 
 
-def draw_frame(state: GameState, screen: pygame.Surface, font: Any,
-               textures: Textures, z_buffer: DepthBuffer,
-               player_moving: bool) -> None:
+def draw_frame(
+    state: GameState,
+    screen: pygame.Surface,
+    font: pygame.freetype.Font,
+    textures: Textures,
+    z_buffer: DepthBuffer,
+    player_moving: bool,
+) -> None:
     """Draw one complete gameplay frame (3D view, sprites, HUD)."""
     eye = EYE_HEIGHT + state.jump_height
-    walls = cast_rays(state.px, state.py, state.pa, state.door_anim)
-    draw_floor_ceiling(screen, state.px, state.py, state.pa, textures, eye)
+    walls = cast_rays(state.world, state.px, state.py, state.pa, state.door_anim)
+    draw_floor_ceiling(state.world, screen, state.px, state.py, state.pa, textures, eye)
     draw_3d(screen, walls, z_buffer, font, textures, eye, door_anim=state.door_anim)
-    billboards = [Billboard("START", *gmap.PLAYER_SPAWN, (20, 20, 80))]
+    billboards = [Billboard("START", *state.world.player_spawn, (20, 20, 80))]
     if state.boss is not None and state.boss.alive:
         billboards.append(Billboard("BOSS", state.boss.x, state.boss.y, (80, 20, 80)))
-    draw_world_sprites(screen, state.px, state.py, state.pa, z_buffer, font,
-                       enemies=state.enemies, health_packs=state.health_packs,
-                       weapon_pickups=state.weapon_pickups, rockets=state.rockets,
-                       billboards=billboards, eye_height=eye)
-    draw_minimap(screen, state.px, state.py, state.pa, state.enemies,
-                 state.health_packs, state.weapon_pickups, state.rockets)
+    draw_world_sprites(
+        screen,
+        state.px,
+        state.py,
+        state.pa,
+        z_buffer,
+        font,
+        enemies=state.enemies,
+        health_packs=state.health_packs,
+        weapon_pickups=state.weapon_pickups,
+        rockets=state.rockets,
+        billboards=billboards,
+        eye_height=eye,
+    )
+    draw_minimap(
+        state.world,
+        screen,
+        state.px,
+        state.py,
+        state.pa,
+        state.enemies,
+        state.health_packs,
+        state.weapon_pickups,
+        state.rockets,
+    )
     draw_crosshair(screen)
-    draw_weapon(screen, state.shooting, state.shoot_timer, player_moving,
-                state.game_time, state.weapon, state.gatling_spin)
-    draw_hud(screen, font, state.hp, state.ammo[AMMO_INDEX[state.weapon]], state.kills,
-             state.total_enemies, WEAPON_NAMES[state.weapon], state.level)
+    draw_weapon(
+        screen,
+        state.shooting,
+        state.shoot_timer,
+        player_moving,
+        state.game_time,
+        state.weapon,
+        state.gatling_spin,
+    )
+    draw_hud(
+        screen,
+        font,
+        state.hp,
+        state.ammo[WEAPONS[state.weapon].ammo_pool],
+        state.kills,
+        state.total_enemies,
+        WEAPONS[state.weapon].name,
+        state.level,
+    )
 
-    door_pos = find_door_in_front(state.px, state.py, state.pa)
+    door_pos = state.world.find_door_in_front(state.px, state.py, state.pa)
     if door_pos is not None and door_pos not in state.door_anim:
         prompt_surf, prompt_rect = font.render("Press [E] to open", YELLOW, size=20)
         screen.blit(prompt_surf, (WIDTH // 2 - prompt_rect.width // 2, HEIGHT // 2 + 60))
@@ -736,8 +878,8 @@ def main() -> None:
     big_font = pygame.freetype.SysFont("monospace", 48)
     sfx = init_sounds()
     textures = generate_textures()
-    sfx['music'].set_volume(0.10)
-    sfx['music'].play(loops=-1, fade_ms=800)
+    sfx["music"].set_volume(0.10)
+    sfx["music"].play(loops=-1, fade_ms=800)
 
     state = GameState()
     reset_game(state)
@@ -753,6 +895,8 @@ def main() -> None:
         dt = min(clock.tick(FPS), 50)
 
         running = handle_events(state, sfx, pressed_scancodes)
+        if not running:
+            break
 
         if state.game_over:
             draw_game_over(screen, state, font, big_font)
@@ -777,16 +921,7 @@ def main() -> None:
             pygame.mixer.unpause()
 
         keys = pygame.key.get_pressed()
-        player_moving = update_player(state, dt, keys, pressed_scancodes, sfx)
-        update_combat(state, dt, sfx)
-        update_doors(state, dt, sfx)
-        update_enemies(state, dt, sfx)
-        update_pickups(state, dt, sfx)
-        update_rockets(state, dt, sfx)
-        check_win_lose(state)
-
-        if state.level_banner_timer > 0:
-            state.level_banner_timer -= dt
+        player_moving = update_game(state, dt, keys, pressed_scancodes, sfx)
 
         draw_frame(state, screen, font, textures, z_buffer, player_moving)
         draw_level_banner(screen, state, big_font)

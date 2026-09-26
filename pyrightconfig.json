@@ -1,12 +1,7 @@
 {
-  "include": ["shooter"],
-  "typeCheckingMode": "strict",
-  "reportMissingImports": "none",
-  "reportMissingTypeStubs": "none",
-  "reportUnknownMemberType": "none",
-  "reportUnknownArgumentType": "none",
-  "reportUnknownVariableType": "none",
-  "reportUnknownParameterType": "none",
-  "reportUnknownLambdaType": "none",
-  "reportConstantRedefinition": "none"
+  "include": ["shooter", "shooter.py", "tests"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "strict"
 }

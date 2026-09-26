@@ -64,35 +64,24 @@ python -m shooter
 | Pause / resume | `Esc` (a click also resumes) |
 | Quit | `Q` while paused, `Esc` on the game-over screen |
 
-## Project Layout
+## Development Checks
 
-```
-shooter.py              Entry point
-shooter/
-├── constants.py        Display, audio, and game-balance tuning values
-├── types.py            Shared type aliases
-├── map.py              Maze grid, spatial queries, level generation
-├── sound.py            Procedural sound synthesis
-├── textures.py         Procedural texture generation
-├── entities.py         Enemies, pickups, rockets, hitscan
-├── raycaster.py        Ray casting engine
-├── occlusion.py        Wall depth buffer and sprite clipping through openings
-├── render_world.py     Floor, ceiling, and wall rendering
-├── render_sprites.py   Billboarded sprites and effects
-├── render_ui.py        Minimap, crosshair, HUD
-├── weapons.py          First-person weapon viewmodels
-└── game.py             GameState and main loop
-```
-
-All mutable state lives in a single `GameState` object. The main loop is split into focused update functions (`update_player`, `update_combat`, `update_doors`, `update_enemies`, `update_pickups`, `update_rockets`, `check_win_lose`) so each behavior can be located and modified independently. Game balance — player physics, weapon stats, spawn counts, timing — is all in `shooter/constants.py`.
-
-## Type Checking
+With the virtual environment activated, install the development tools:
 
 ```bash
-pyright
+python -m pip install -r requirements-dev.txt
 ```
 
-Configuration lives in `pyrightconfig.json`; the codebase passes strict mode.
+Run the same checks as CI:
+
+```bash
+ruff check .
+ruff format --check .
+pyright
+python -m unittest discover -s tests -v
+```
+
+Use `ruff format .` to apply formatting. Ruff configuration lives in `pyproject.toml`. Pyright checks the package, entry point, and tests in strict mode without diagnostic suppressions; its configuration uses the project's `.venv`.
 
 ## License
 

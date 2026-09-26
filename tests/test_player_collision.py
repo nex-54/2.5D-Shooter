@@ -13,6 +13,7 @@ from shooter.constants import PLAYER_MARGIN
 from shooter.entities import Boss
 from shooter.game import GameState, check_win_lose, update_doors, update_player
 from shooter.types import DoorAnim
+from tests.support import open_world
 
 
 class Keys:
@@ -31,22 +32,14 @@ def distance_to_tile(x: float, y: float, col: int, row: int) -> float:
 
 class PlayerCollisionTests(unittest.TestCase):
     def setUp(self) -> None:
-        saved_maze = [row.copy() for row in gmap.MAZE]
-        saved_exit = gmap.EXIT_X, gmap.EXIT_Y
-        self.addCleanup(self.restore, saved_maze, saved_exit)
-        for y, row in enumerate(gmap.MAZE):
-            row[:] = [int(x in (0, gmap.MAP_W - 1) or y in (0, gmap.MAP_H - 1))
-                      for x in range(gmap.MAP_W)]
+        self.world = open_world()
         self.state = GameState()
+        self.state.world = self.world
         self.sfx = MagicMock()
 
-    @staticmethod
-    def restore(maze: list[list[int]], exit_pos: tuple[int, int]) -> None:
-        gmap.MAZE[:] = maze
-        gmap.EXIT_X, gmap.EXIT_Y = exit_pos
-
-    def walk(self, frames: int, keys: Keys | None = None,
-             dt: int = 16) -> list[tuple[float, float]]:
+    def walk(
+        self, frames: int, keys: Keys | None = None, dt: int = 16
+    ) -> list[tuple[float, float]]:
         """Hold W for some frames and return the path the player took."""
         path: list[tuple[float, float]] = []
         for _ in range(frames):
@@ -56,13 +49,13 @@ class PlayerCollisionTests(unittest.TestCase):
 
     def test_exit_stays_shut_until_the_boss_dies(self) -> None:
         exit_x = gmap.MAP_W - 1
-        gmap.MAZE[5][exit_x] = gmap.EXIT_TILE
-        gmap.EXIT_X, gmap.EXIT_Y = exit_x, 5
+        self.world.maze[5][exit_x] = gmap.EXIT_TILE
+        self.world.exit_pos = exit_x, 5
         self.state.boss = Boss(10.5, 10.5)
         self.state.px, self.state.py, self.state.pa = exit_x - 2.5, 5.5, 0.0
         self.walk(60)
         self.assertAlmostEqual(self.state.px, exit_x - PLAYER_MARGIN, places=5)
-        with patch('shooter.game.start_level') as start_level:
+        with patch("shooter.game.start_level") as start_level:
             check_win_lose(self.state)
             start_level.assert_not_called()
 
@@ -75,23 +68,24 @@ class PlayerCollisionTests(unittest.TestCase):
     def test_footprint_keeps_its_margin_from_corners_and_glancing_walls(self) -> None:
         # A diagonal walk past an outer corner, and a walk that glances off a wall.
         for wall_tiles, start, angle in (
-                ([(6, 6)], (5.0, 5.0), math.pi / 4),
-                ([(8, row) for row in range(1, gmap.MAP_H - 1)], (6.5, 2.5), math.radians(80)),
+            ([(6, 6)], (5.0, 5.0), math.pi / 4),
+            ([(8, row) for row in range(1, gmap.MAP_H - 1)], (6.5, 2.5), math.radians(80)),
         ):
             with self.subTest(walls=wall_tiles[:2], angle=angle):
                 for col, row in wall_tiles:
-                    gmap.MAZE[row][col] = 1
+                    self.world.maze[row][col] = 1
                 self.state.px, self.state.py = start
                 self.state.pa = angle
                 path = self.walk(200)
-                closest = min(distance_to_tile(x, y, col, row)
-                              for x, y in path for col, row in wall_tiles)
+                closest = min(
+                    distance_to_tile(x, y, col, row) for x, y in path for col, row in wall_tiles
+                )
                 self.assertGreaterEqual(closest, PLAYER_MARGIN - 1e-5)
                 for col, row in wall_tiles:
-                    gmap.MAZE[row][col] = 0
+                    self.world.maze[row][col] = 0
 
     def test_walls_stop_the_player_flush_at_any_frame_rate(self) -> None:
-        gmap.MAZE[5][5] = 1
+        self.world.maze[5][5] = 1
         for dt in (16, 50):
             with self.subTest(dt=dt):
                 self.state.px, self.state.py, self.state.pa = 2.5, 5.5, 0.0
@@ -99,7 +93,7 @@ class PlayerCollisionTests(unittest.TestCase):
                 self.assertAlmostEqual(self.state.px, 5 - PLAYER_MARGIN, places=5)
 
     def test_barriers_block_on_foot_but_can_be_jumped(self) -> None:
-        gmap.MAZE[5][5] = gmap.BARRIER_TILE
+        self.world.maze[5][5] = gmap.BARRIER_TILE
         self.state.px, self.state.py, self.state.pa = 2.5, 5.5, 0.0
         self.walk(100)
         self.assertAlmostEqual(self.state.px, 5 - PLAYER_MARGIN, places=5)
@@ -122,14 +116,15 @@ class PlayerCollisionTests(unittest.TestCase):
         self.state.py = 5.5
         for px, closes in ((5 - PLAYER_MARGIN / 2, False), (5 - PLAYER_MARGIN - 0.01, True)):
             with self.subTest(px=px):
-                gmap.MAZE[5][5] = 0
-                self.state.door_anim = {(5, 5): DoorAnim(phase='open', progress=1.0, timer=0)}
+                self.world.maze[5][5] = 0
+                self.state.door_anim = {(5, 5): DoorAnim(phase="open", progress=1.0, timer=0)}
                 self.state.px = px
                 update_doors(self.state, 16, self.sfx)
-                self.assertEqual(gmap.MAZE[5][5] == gmap.DOOR_TILE, closes)
-                self.assertEqual(self.state.door_anim[(5, 5)]['phase'],
-                                 'closing' if closes else 'open')
+                self.assertEqual(self.world.tile_at(5.5, 5.5) == gmap.DOOR_TILE, closes)
+                self.assertEqual(
+                    self.state.door_anim[(5, 5)]["phase"], "closing" if closes else "open"
+                )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

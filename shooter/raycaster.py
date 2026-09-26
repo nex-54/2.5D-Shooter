@@ -6,16 +6,22 @@ from __future__ import annotations
 
 import math
 from typing import Callable
-from shooter.constants import FOV, HALF_FOV, NUM_RAYS, MAX_DEPTH
-from shooter.map import tile_at, is_solid, BARRIER_TILE, DOOR_TILE
+
+from shooter.constants import FOV, HALF_FOV, MAX_DEPTH, NUM_RAYS
+from shooter.map import BARRIER_TILE, DOOR_TILE, LevelState
 from shooter.types import BgHit, DoorAnimMap, WallColumn
 
 __all__ = ["BgHit", "WallColumn", "cast_rays"]
 
 
-def _cast_single(px: float, py: float, sin_a: float, cos_a: float,
-                 stop_func: Callable[[float, float], bool]
-                 ) -> tuple[float, float, int, int, tuple[int, int]]:
+def _cast_single(
+    world: LevelState,
+    px: float,
+    py: float,
+    sin_a: float,
+    cos_a: float,
+    stop_func: Callable[[float, float], bool],
+) -> tuple[float, float, int, int, tuple[int, int]]:
     """Cast one ray, stopping at tiles where stop_func returns True."""
     # horizontal intersections
     y_hor: float
@@ -42,7 +48,7 @@ def _cast_single(px: float, py: float, sin_a: float, cos_a: float,
             if stop_func(hx, check_y):
                 depth_h = depth_v_h
                 hit_hx = hx
-                tile_h = tile_at(hx, check_y)
+                tile_h = world.tile_at(hx, check_y)
                 tile_h_coords = (int(hx), int(check_y))
                 break
             y_hor += dy
@@ -74,7 +80,7 @@ def _cast_single(px: float, py: float, sin_a: float, cos_a: float,
             if stop_func(check_x, vy):
                 depth_v = depth_h_v
                 hit_vx = vy
-                tile_v = tile_at(check_x, vy)
+                tile_v = world.tile_at(check_x, vy)
                 tile_v_coords = (int(check_x), int(vy))
                 break
             x_ver += dx
@@ -91,11 +97,12 @@ def _is_partial(tile: int, coords: tuple[int, int], door_anim: DoorAnimMap) -> b
     if tile == BARRIER_TILE:
         return True
     anim = door_anim.get(coords) if tile == DOOR_TILE else None
-    return anim is not None and anim['progress'] > 0
+    return anim is not None and anim["progress"] > 0
 
 
-def cast_rays(px: float, py: float, pa: float,
-              door_anim: DoorAnimMap | None = None) -> list[WallColumn]:
+def cast_rays(
+    world: LevelState, px: float, py: float, pa: float, door_anim: DoorAnimMap | None = None
+) -> list[WallColumn]:
     """Cast each column through partial obstacles until it reaches a full wall."""
     if door_anim is None:
         door_anim = {}
@@ -106,20 +113,23 @@ def cast_rays(px: float, py: float, pa: float,
         sin_a = math.sin(ray_angle)
         cos_a = math.cos(ray_angle)
 
-        depth, offset, side, hit_tile, tile_coords = _cast_single(px, py, sin_a, cos_a, is_solid)
+        depth, offset, side, hit_tile, tile_coords = _cast_single(
+            world, px, py, sin_a, cos_a, world.is_solid
+        )
 
         bg_hits: list[BgHit] = []
         if _is_partial(hit_tile, tile_coords, door_anim):
             passed = {tile_coords}
 
-            def next_obstacle(x: float, y: float) -> bool:
-                return (int(x), int(y)) not in passed and is_solid(x, y)
+            def next_obstacle(x: float, y: float, ignored: set[tuple[int, int]] = passed) -> bool:
+                return (int(x), int(y)) not in ignored and world.is_solid(x, y)
 
             # Keep other doors and barriers, rather than casting through all of
             # them: a closed door behind an opening door must still hide sprites.
             for _ in range(MAX_DEPTH):
                 bg_depth, bg_offset, bg_side, bg_tile, bg_coords = _cast_single(
-                    px, py, sin_a, cos_a, next_obstacle)
+                    world, px, py, sin_a, cos_a, next_obstacle
+                )
                 corr = max(bg_depth * math.cos(ray_angle - pa), 0.0001)
                 bg_hits.append(BgHit(corr, bg_offset, bg_side, bg_tile, bg_coords))
                 if not _is_partial(bg_tile, bg_coords, door_anim):

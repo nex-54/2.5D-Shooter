@@ -6,12 +6,20 @@ from __future__ import annotations
 
 import math
 import random
+
 import pygame
-from shooter.constants import WIDTH, HEIGHT
+
+from shooter.constants import HEIGHT, WIDTH
 
 
-def draw_gatling(screen: pygame.Surface, shooting: bool, shoot_timer: int,
-                 player_moving: bool, game_time: float, spin: float) -> None:
+def draw_gatling(
+    screen: pygame.Surface,
+    shooting: bool,
+    shoot_timer: int,
+    player_moving: bool,
+    game_time: float,
+    spin: float,
+) -> None:
     """Draw a gatling gun with spinning barrels."""
     cx = WIDTH // 2 + 100
     by = HEIGHT + 30
@@ -67,8 +75,7 @@ def draw_gatling(screen: pygame.Surface, shooting: bool, shoot_timer: int,
         by_b = barrel_cy + int(math.sin(angle) * barrel_radius)
         pygame.draw.circle(screen, (45, 45, 50), (bx, by_b), 5)
         pygame.draw.circle(screen, (25, 25, 30), (bx, by_b), 3)
-        pygame.draw.rect(screen, (50, 50, 55),
-                         (bx - 3, barrel_cy - barrel_len, 6, barrel_len))
+        pygame.draw.rect(screen, (50, 50, 55), (bx - 3, barrel_cy - barrel_len, 6, barrel_len))
 
     pygame.draw.circle(screen, (70, 70, 75), (barrel_cx, barrel_cy), 6)
     pygame.draw.circle(screen, (40, 40, 45), (barrel_cx, barrel_cy), 3)
@@ -120,8 +127,9 @@ def draw_gatling(screen: pygame.Surface, shooting: bool, shoot_timer: int,
             pygame.draw.line(screen, (255, 240, 100), (flash_x, flash_y), (ex, ey), 2)
 
 
-def draw_shotgun(screen: pygame.Surface, shooting: bool, shoot_timer: int,
-                 player_moving: bool, game_time: float) -> None:
+def draw_shotgun(
+    screen: pygame.Surface, shooting: bool, shoot_timer: int, player_moving: bool, game_time: float
+) -> None:
     """Draw a pump-action shotgun."""
     cx = WIDTH // 2 + 80
     by = HEIGHT + 30
@@ -154,8 +162,7 @@ def draw_shotgun(screen: pygame.Surface, shooting: bool, shoot_timer: int,
     for i in range(4):
         fy = oy - 115 + i * 11
         pygame.draw.ellipse(screen, hand_skin, (ox - 30, fy, 13, 11))
-    pygame.draw.ellipse(screen, hand_skin,
-                        (ox - 55, oy - 170 + pump_offset, 35, 30))
+    pygame.draw.ellipse(screen, hand_skin, (ox - 55, oy - 170 + pump_offset, 35, 30))
 
     # --- Stock ---
     stock_l = ox - 25
@@ -177,9 +184,7 @@ def draw_shotgun(screen: pygame.Surface, shooting: bool, shoot_timer: int,
     pygame.draw.rect(screen, (70, 70, 75), (recv_l, recv_t, 6, recv_h))
     pygame.draw.rect(screen, (38, 38, 42), (recv_l + recv_w - 6, recv_t, 6, recv_h))
     pygame.draw.rect(screen, (30, 30, 35), (recv_l + 8, recv_t + 10, 16, 12))
-    pygame.draw.arc(screen, (50, 50, 55),
-                    (recv_l + 5, recv_t + 35, 22, 20),
-                    0, math.pi, 2)
+    pygame.draw.arc(screen, (50, 50, 55), (recv_l + 5, recv_t + 35, 22, 20), 0, math.pi, 2)
     pygame.draw.rect(screen, (45, 45, 50), (recv_l + 14, recv_t + 38, 4, 12))
 
     # --- Barrel ---
@@ -206,8 +211,7 @@ def draw_shotgun(screen: pygame.Surface, shooting: bool, shoot_timer: int,
     pygame.draw.rect(screen, (65, 45, 25), (pump_l + pump_w - 4, pump_t, 4, pump_h))
 
     # --- Front sight ---
-    pygame.draw.rect(screen, (80, 80, 85),
-                     (barrel_l + barrel_w // 2 - 2, barrel_t - 6, 4, 6))
+    pygame.draw.rect(screen, (80, 80, 85), (barrel_l + barrel_w // 2 - 2, barrel_t - 6, 4, 6))
 
     # --- Muzzle flash ---
     if shooting and shoot_timer > 450:
@@ -225,8 +229,9 @@ def draw_shotgun(screen: pygame.Surface, shooting: bool, shoot_timer: int,
             pygame.draw.line(screen, (255, 230, 120), (flash_x, flash_y), (ex, ey), 2)
 
 
-def _draw_pistol(screen: pygame.Surface, shooting: bool, shoot_timer: int,
-                 player_moving: bool, game_time: float) -> None:
+def _draw_pistol(
+    screen: pygame.Surface, shooting: bool, shoot_timer: int, player_moving: bool, game_time: float
+) -> None:
     """Draw the pistol viewmodel."""
     cx = WIDTH // 2 + 120
     by = HEIGHT + 20
@@ -287,9 +292,7 @@ def _draw_pistol(screen: pygame.Surface, shooting: bool, shoot_timer: int,
     frame_h = 30
     pygame.draw.rect(screen, (65, 65, 65), (frame_l, frame_t, frame_w, frame_h))
     pygame.draw.rect(screen, (85, 85, 85), (frame_l, frame_t, 5, frame_h))
-    pygame.draw.arc(screen, (60, 60, 60),
-                    (frame_l + 2, frame_t + 12, 20, 22),
-                    0, math.pi, 2)
+    pygame.draw.arc(screen, (60, 60, 60), (frame_l + 2, frame_t + 12, 20, 22), 0, math.pi, 2)
     pygame.draw.rect(screen, (45, 45, 50), (frame_l + 10, frame_t + 14, 4, 12))
 
     # --- Grip ---
@@ -327,8 +330,9 @@ def _draw_pistol(screen: pygame.Surface, shooting: bool, shoot_timer: int,
             pygame.draw.line(screen, (255, 240, 150), (flash_x, flash_y), (ex, ey), 2)
 
 
-def _draw_rocket_launcher(screen: pygame.Surface, shooting: bool, shoot_timer: int,
-                          player_moving: bool, game_time: float) -> None:
+def _draw_rocket_launcher(
+    screen: pygame.Surface, shooting: bool, shoot_timer: int, player_moving: bool, game_time: float
+) -> None:
     """Draw a shoulder-fired rocket launcher viewmodel, tube pointing forward (up on screen)."""
     cx = WIDTH // 2 + 90
     by = HEIGHT + 30
@@ -354,11 +358,11 @@ def _draw_rocket_launcher(screen: pygame.Surface, shooting: bool, shoot_timer: i
     oy = by + bob_y + recoil_y
 
     olive_lt = (100, 110, 65)
-    olive    = (70, 80, 45)
+    olive = (70, 80, 45)
     olive_dk = (45, 52, 30)
     olive_sh = (55, 63, 38)
     metal_dk = (35, 35, 40)
-    metal    = (60, 60, 65)
+    metal = (60, 60, 65)
     metal_hi = (95, 95, 100)
     hand_skin = (200, 160, 120)
     hand_dark = (170, 130, 95)
@@ -388,49 +392,70 @@ def _draw_rocket_launcher(screen: pygame.Surface, shooting: bool, shoot_timer: i
     pygame.draw.rect(screen, metal, (muzzle_l, muzzle_t, muzzle_w, 4))
     # Dark inner bore (ellipse for perspective)
     bore_inset = 8
-    pygame.draw.ellipse(screen, (18, 18, 20),
-                        (muzzle_l + bore_inset, muzzle_t + 3,
-                         muzzle_w - bore_inset * 2, muzzle_h + 6))
-    pygame.draw.ellipse(screen, (8, 8, 10),
-                        (muzzle_l + bore_inset + 4, muzzle_t + 6,
-                         muzzle_w - (bore_inset + 4) * 2, muzzle_h))
+    pygame.draw.ellipse(
+        screen,
+        (18, 18, 20),
+        (muzzle_l + bore_inset, muzzle_t + 3, muzzle_w - bore_inset * 2, muzzle_h + 6),
+    )
+    pygame.draw.ellipse(
+        screen,
+        (8, 8, 10),
+        (muzzle_l + bore_inset + 4, muzzle_t + 6, muzzle_w - (bore_inset + 4) * 2, muzzle_h),
+    )
 
     # --- Warhead tip peeking out of the bore when not firing ---
     if shoot_timer < 150:
         warhead_w = tube_w - 28
         warhead_x = tube_l + (tube_w - warhead_w) // 2
         warhead_y = muzzle_t - 6
-        pygame.draw.ellipse(screen, (180, 60, 40),
-                            (warhead_x, warhead_y, warhead_w, 14))
-        pygame.draw.polygon(screen, (210, 80, 50), [
-            (warhead_x, warhead_y + 4),
-            (warhead_x + warhead_w, warhead_y + 4),
-            (warhead_x + warhead_w // 2, warhead_y - 14),
-        ])
+        pygame.draw.ellipse(screen, (180, 60, 40), (warhead_x, warhead_y, warhead_w, 14))
+        pygame.draw.polygon(
+            screen,
+            (210, 80, 50),
+            [
+                (warhead_x, warhead_y + 4),
+                (warhead_x + warhead_w, warhead_y + 4),
+                (warhead_x + warhead_w // 2, warhead_y - 14),
+            ],
+        )
         # tip highlight
-        pygame.draw.line(screen, (240, 150, 100),
-                         (warhead_x + warhead_w // 2 - 1, warhead_y - 10),
-                         (warhead_x + warhead_w // 2 - 1, warhead_y + 2), 2)
+        pygame.draw.line(
+            screen,
+            (240, 150, 100),
+            (warhead_x + warhead_w // 2 - 1, warhead_y - 10),
+            (warhead_x + warhead_w // 2 - 1, warhead_y + 2),
+            2,
+        )
 
     # --- Rear exhaust cone (bottom of tube, flared backblast vent) ---
     rear_top = tube_t + tube_h
     rear_spread = 18
-    pygame.draw.polygon(screen, olive_dk, [
-        (tube_l, rear_top),
-        (tube_l - rear_spread, rear_top + 34),
-        (tube_l + tube_w + rear_spread, rear_top + 34),
-        (tube_l + tube_w, rear_top),
-    ])
-    pygame.draw.polygon(screen, olive, [
-        (tube_l + 4, rear_top),
-        (tube_l - rear_spread + 10, rear_top + 28),
-        (tube_l + tube_w + rear_spread - 10, rear_top + 28),
-        (tube_l + tube_w - 4, rear_top),
-    ])
+    pygame.draw.polygon(
+        screen,
+        olive_dk,
+        [
+            (tube_l, rear_top),
+            (tube_l - rear_spread, rear_top + 34),
+            (tube_l + tube_w + rear_spread, rear_top + 34),
+            (tube_l + tube_w, rear_top),
+        ],
+    )
+    pygame.draw.polygon(
+        screen,
+        olive,
+        [
+            (tube_l + 4, rear_top),
+            (tube_l - rear_spread + 10, rear_top + 28),
+            (tube_l + tube_w + rear_spread - 10, rear_top + 28),
+            (tube_l + tube_w - 4, rear_top),
+        ],
+    )
     # Dark opening inside the cone
-    pygame.draw.ellipse(screen, (15, 15, 18),
-                        (tube_l - rear_spread + 8, rear_top + 22,
-                         tube_w + rear_spread * 2 - 16, 14))
+    pygame.draw.ellipse(
+        screen,
+        (15, 15, 18),
+        (tube_l - rear_spread + 8, rear_top + 22, tube_w + rear_spread * 2 - 16, 14),
+    )
 
     # --- Iron sight on top of the tube ---
     sight_w = 14
@@ -440,8 +465,7 @@ def _draw_rocket_launcher(screen: pygame.Surface, shooting: bool, shoot_timer: i
     pygame.draw.rect(screen, metal_dk, (sight_l, sight_t, sight_w, sight_h))
     pygame.draw.rect(screen, metal, (sight_l, sight_t, sight_w, 4))
     # front blade peg
-    pygame.draw.rect(screen, metal_hi,
-                     (sight_l + sight_w // 2 - 1, sight_t - 6, 2, 6))
+    pygame.draw.rect(screen, metal_hi, (sight_l + sight_w // 2 - 1, sight_t - 6, 2, 6))
 
     # --- Pistol-style trigger grip under the tube ---
     grip_w = 28
@@ -452,41 +476,32 @@ def _draw_rocket_launcher(screen: pygame.Surface, shooting: bool, shoot_timer: i
     pygame.draw.rect(screen, olive_sh, (grip_l, grip_t, 5, grip_h))
     for i in range(5):
         gy = grip_t + 8 + i * 10
-        pygame.draw.line(screen, (30, 36, 22),
-                         (grip_l + 3, gy), (grip_l + grip_w - 3, gy), 1)
+        pygame.draw.line(screen, (30, 36, 22), (grip_l + 3, gy), (grip_l + grip_w - 3, gy), 1)
     # Trigger guard (a small arc ahead of the grip)
     guard_l = grip_l - 14
     guard_t = grip_t + 4
-    pygame.draw.arc(screen, metal_dk,
-                    (guard_l, guard_t, grip_w + 10, 30),
-                    -math.pi / 2, math.pi / 2, 3)
-    pygame.draw.rect(screen, metal_dk,
-                     (grip_l - 4, guard_t + 8, 6, 10))
+    pygame.draw.arc(
+        screen, metal_dk, (guard_l, guard_t, grip_w + 10, 30), -math.pi / 2, math.pi / 2, 3
+    )
+    pygame.draw.rect(screen, metal_dk, (grip_l - 4, guard_t + 8, 6, 10))
 
     # --- Firing hand wrapping the grip ---
-    pygame.draw.ellipse(screen, hand_skin,
-                        (grip_l - 12, grip_t + 18, 40, 46))
-    pygame.draw.ellipse(screen, hand_dark,
-                        (grip_l - 10, grip_t + 24, 14, 34))
+    pygame.draw.ellipse(screen, hand_skin, (grip_l - 12, grip_t + 18, 40, 46))
+    pygame.draw.ellipse(screen, hand_dark, (grip_l - 10, grip_t + 24, 14, 34))
     for i in range(4):
         fy = grip_t + 8 + i * 10
-        pygame.draw.ellipse(screen, hand_skin,
-                            (grip_l + grip_w - 6, fy, 14, 10))
+        pygame.draw.ellipse(screen, hand_skin, (grip_l + grip_w - 6, fy, 14, 10))
     # Thumb over the top of the grip
-    pygame.draw.ellipse(screen, hand_skin,
-                        (grip_l + 2, grip_t - 4, 22, 14))
+    pygame.draw.ellipse(screen, hand_skin, (grip_l + 2, grip_t - 4, 22, 14))
 
     # --- Forward support hand on the tube ---
     fwd_hand_x = tube_l - 22
     fwd_hand_y = tube_t + tube_h - 110
-    pygame.draw.ellipse(screen, hand_skin,
-                        (fwd_hand_x, fwd_hand_y, 42, 36))
-    pygame.draw.ellipse(screen, hand_dark,
-                        (fwd_hand_x + 4, fwd_hand_y + 8, 14, 22))
+    pygame.draw.ellipse(screen, hand_skin, (fwd_hand_x, fwd_hand_y, 42, 36))
+    pygame.draw.ellipse(screen, hand_dark, (fwd_hand_x + 4, fwd_hand_y + 8, 14, 22))
     for i in range(4):
         fy = fwd_hand_y - 6 + i * 11
-        pygame.draw.ellipse(screen, hand_skin,
-                            (fwd_hand_x + 28, fy, 14, 11))
+        pygame.draw.ellipse(screen, hand_skin, (fwd_hand_x + 28, fy, 14, 11))
 
     # --- Muzzle flash + backblast on fire ---
     if shooting and shoot_timer > 600:
@@ -501,8 +516,7 @@ def _draw_rocket_launcher(screen: pygame.Surface, shooting: bool, shoot_timer: i
             rad = math.radians(a + game_time * 700)
             ex = flash_cx + int(math.cos(rad) * 60)
             ey = flash_cy + int(math.sin(rad) * 60)
-            pygame.draw.line(screen, (255, 220, 120),
-                             (flash_cx, flash_cy), (ex, ey), 2)
+            pygame.draw.line(screen, (255, 220, 120), (flash_cx, flash_cy), (ex, ey), 2)
         # Backblast puff out of the rear vent
         back_cx = tube_l + tube_w // 2
         back_cy = rear_top + 60
@@ -512,8 +526,9 @@ def _draw_rocket_launcher(screen: pygame.Surface, shooting: bool, shoot_timer: i
         screen.blit(back_surf, (back_cx - 90, back_cy - 90))
 
 
-def _draw_nuke_detonator(screen: pygame.Surface, shooting: bool, shoot_timer: int,
-                         player_moving: bool, game_time: float) -> None:
+def _draw_nuke_detonator(
+    screen: pygame.Surface, shooting: bool, shoot_timer: int, player_moving: bool, game_time: float
+) -> None:
     """Draw a handheld detonator box with a big red button."""
     cx = WIDTH // 2 + 90
     by = HEIGHT + 30
@@ -567,8 +582,9 @@ def _draw_nuke_detonator(screen: pygame.Surface, shooting: bool, shoot_timer: in
     pygame.draw.ellipse(screen, hand_dark, (box_l - 16, box_t + box_h + 2, 22, 32))
     pygame.draw.ellipse(screen, hand_skin, (box_l + box_w - 40, box_t + box_h - 10, 60, 50))
     for i in range(3):
-        pygame.draw.ellipse(screen, hand_skin,
-                            (box_l + box_w - 10 + i * 4, box_t + box_h - 20 + i * 6, 12, 16))
+        pygame.draw.ellipse(
+            screen, hand_skin, (box_l + box_w - 10 + i * 4, box_t + box_h - 20 + i * 6, 12, 16)
+        )
 
     if shooting and shoot_timer > 900:
         glow = pygame.Surface((120, 120), pygame.SRCALPHA)
@@ -577,9 +593,15 @@ def _draw_nuke_detonator(screen: pygame.Surface, shooting: bool, shoot_timer: in
         screen.blit(glow, (btn_cx - 60, btn_cy - 60))
 
 
-def draw_weapon(screen: pygame.Surface, shooting: bool, shoot_timer: int,
-                player_moving: bool, game_time: float, weapon: int,
-                gatling_spin: float) -> None:
+def draw_weapon(
+    screen: pygame.Surface,
+    shooting: bool,
+    shoot_timer: int,
+    player_moving: bool,
+    game_time: float,
+    weapon: int,
+    gatling_spin: float,
+) -> None:
     """Draw the current weapon viewmodel."""
     if weapon == 1:
         draw_shotgun(screen, shooting, shoot_timer, player_moving, game_time)

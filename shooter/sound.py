@@ -4,24 +4,26 @@ Procedural sound synthesis — generates all game audio at startup.
 
 from __future__ import annotations
 
+import array
 import math
 import random
-import array
+
 import pygame
+
 from shooter.constants import SAMPLE_RATE
 from shooter.types import Sfx
 
 
 def _make_sound(samples: list[float]) -> pygame.mixer.Sound:
     """Create a pygame Sound from a list of 16-bit signed samples (mono)."""
-    buf = array.array('h', [max(-32767, min(32767, int(s))) for s in samples])
+    buf = array.array("h", [max(-32767, min(32767, int(s))) for s in samples])
     return pygame.mixer.Sound(buffer=buf)
 
 
 def _synth_noise(duration: float, volume: float = 0.3, decay: bool = True) -> list[float]:
     """Generate noise burst (for footsteps, impacts)."""
     n = int(SAMPLE_RATE * duration)
-    samples = []
+    samples: list[float] = []
     for i in range(n):
         t = i / n
         env = (1 - t) if decay else 1
@@ -29,10 +31,12 @@ def _synth_noise(duration: float, volume: float = 0.3, decay: bool = True) -> li
     return samples
 
 
-def _synth_tone(freq: float, duration: float, volume: float = 0.3, decay: bool = True) -> list[float]:
+def _synth_tone(
+    freq: float, duration: float, volume: float = 0.3, decay: bool = True
+) -> list[float]:
     """Generate a sine tone."""
     n = int(SAMPLE_RATE * duration)
-    samples = []
+    samples: list[float] = []
     for i in range(n):
         t = i / SAMPLE_RATE
         env = (1 - i / n) if decay else 1
@@ -51,21 +55,21 @@ def init_sounds() -> Sfx:
             t = i / SAMPLE_RATE
             env = 1 - i / len(s)
             s[i] += math.sin(2 * math.pi * (60 + j * 10) * t) * 0.15 * env * 32767
-        sounds[f'step{j}'] = _make_sound(s)
+        sounds[f"step{j}"] = _make_sound(s)
 
     # --- Pistol shot ---
     s = _synth_noise(0.15, volume=0.5, decay=True)
     for i in range(min(400, len(s))):
         t = i / SAMPLE_RATE
         s[i] += math.sin(2 * math.pi * 800 * t) * 0.3 * (1 - i / 400) * 32767
-    sounds['pistol'] = _make_sound(s)
+    sounds["pistol"] = _make_sound(s)
 
     # --- Gatling shot (shorter, sharper) ---
     s = _synth_noise(0.05, volume=0.35, decay=True)
     for i in range(min(200, len(s))):
         t = i / SAMPLE_RATE
         s[i] += math.sin(2 * math.pi * 1200 * t) * 0.2 * (1 - i / 200) * 32767
-    sounds['gatling'] = _make_sound(s)
+    sounds["gatling"] = _make_sound(s)
 
     # --- Shotgun blast (big boom) ---
     s = _synth_noise(0.25, volume=0.7, decay=True)
@@ -74,24 +78,26 @@ def init_sounds() -> Sfx:
         env = 1 - i / len(s)
         s[i] += math.sin(2 * math.pi * 120 * t) * 0.5 * env * 32767
         s[i] += math.sin(2 * math.pi * 300 * t) * 0.2 * env * 32767
-    sounds['shotgun'] = _make_sound(s)
+    sounds["shotgun"] = _make_sound(s)
 
     # --- Rocket launch (whoosh with downward freq sweep) ---
     dur = 0.35
     n = int(SAMPLE_RATE * dur)
-    s = []
+    s: list[float] = []
     for i in range(n):
         t = i / SAMPLE_RATE
         env = 1 - (i / n) ** 1.5
         freq = 900 - (i / n) * 700
-        s.append(math.sin(2 * math.pi * freq * t) * 0.25 * env * 32767 +
-                 random.uniform(-1, 1) * 0.35 * env * 32767)
-    sounds['rocket_fire'] = _make_sound(s)
+        s.append(
+            math.sin(2 * math.pi * freq * t) * 0.25 * env * 32767
+            + random.uniform(-1, 1) * 0.35 * env * 32767
+        )
+    sounds["rocket_fire"] = _make_sound(s)
 
     # --- Explosion (low boom + big noise burst) ---
     dur = 0.6
     n = int(SAMPLE_RATE * dur)
-    s = []
+    s = list[float]()
     for i in range(n):
         t = i / SAMPLE_RATE
         env = (1 - i / n) ** 0.7
@@ -99,22 +105,24 @@ def init_sounds() -> Sfx:
         rumble = math.sin(2 * math.pi * 60 * t) * 0.25 * env
         noise = random.uniform(-1, 1) * 0.55 * env * (1 - (i / n) ** 0.4)
         s.append((boom + rumble + noise) * 32767)
-    sounds['explosion'] = _make_sound(s)
+    sounds["explosion"] = _make_sound(s)
 
     # --- Enemy hurt grunt ---
-    s = []
+    s = list[float]()
     dur = 0.2
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
         t = i / SAMPLE_RATE
         env = 1 - i / n
         freq = 150 + math.sin(t * 30) * 50
-        s.append(math.sin(2 * math.pi * freq * t) * 0.3 * env * 32767 +
-                 random.uniform(-1, 1) * 0.1 * env * 32767)
-    sounds['enemy_hurt'] = _make_sound(s)
+        s.append(
+            math.sin(2 * math.pi * freq * t) * 0.3 * env * 32767
+            + random.uniform(-1, 1) * 0.1 * env * 32767
+        )
+    sounds["enemy_hurt"] = _make_sound(s)
 
     # --- Enemy die ---
-    s = []
+    s = list[float]()
     dur = 0.4
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
@@ -122,44 +130,50 @@ def init_sounds() -> Sfx:
         env = 1 - i / n
         freq = 200 - t * 300
         freq = max(freq, 50)
-        s.append(math.sin(2 * math.pi * freq * t) * 0.35 * env * 32767 +
-                 random.uniform(-1, 1) * 0.15 * env * 32767)
-    sounds['enemy_die'] = _make_sound(s)
+        s.append(
+            math.sin(2 * math.pi * freq * t) * 0.35 * env * 32767
+            + random.uniform(-1, 1) * 0.15 * env * 32767
+        )
+    sounds["enemy_die"] = _make_sound(s)
 
     # --- Enemy attack ---
-    s = []
+    s = list[float]()
     dur = 0.15
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
         t = i / SAMPLE_RATE
         env = 1 - i / n
         freq = 180 + math.sin(t * 50) * 80
-        s.append(math.sin(2 * math.pi * freq * t) * 0.25 * env * 32767 +
-                 random.uniform(-1, 1) * 0.08 * env * 32767)
-    sounds['enemy_attack'] = _make_sound(s)
+        s.append(
+            math.sin(2 * math.pi * freq * t) * 0.25 * env * 32767
+            + random.uniform(-1, 1) * 0.08 * env * 32767
+        )
+    sounds["enemy_attack"] = _make_sound(s)
 
     # --- Pickup ---
     s = _synth_tone(600, 0.08, volume=0.2) + _synth_tone(900, 0.1, volume=0.2)
-    sounds['pickup'] = _make_sound(s)
+    sounds["pickup"] = _make_sound(s)
 
     # --- Empty click ---
     s = _synth_noise(0.03, volume=0.15, decay=True)
-    sounds['empty'] = _make_sound(s)
+    sounds["empty"] = _make_sound(s)
 
     # --- Boss roar ---
-    s = []
+    s = list[float]()
     dur = 0.6
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
         t = i / SAMPLE_RATE
         env = 1 - (i / n) ** 0.5
         freq = 80 + math.sin(t * 15) * 30
-        s.append(math.sin(2 * math.pi * freq * t) * 0.5 * env * 32767 +
-                 random.uniform(-1, 1) * 0.25 * env * 32767)
-    sounds['boss_roar'] = _make_sound(s)
+        s.append(
+            math.sin(2 * math.pi * freq * t) * 0.5 * env * 32767
+            + random.uniform(-1, 1) * 0.25 * env * 32767
+        )
+    sounds["boss_roar"] = _make_sound(s)
 
     # --- Boss die ---
-    s = []
+    s = list[float]()
     dur = 0.8
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
@@ -167,24 +181,28 @@ def init_sounds() -> Sfx:
         env = 1 - (i / n) ** 0.7
         freq = 100 - t * 80
         freq = max(freq, 30)
-        s.append(math.sin(2 * math.pi * freq * t) * 0.5 * env * 32767 +
-                 random.uniform(-1, 1) * 0.3 * env * 32767)
-    sounds['boss_die'] = _make_sound(s)
+        s.append(
+            math.sin(2 * math.pi * freq * t) * 0.5 * env * 32767
+            + random.uniform(-1, 1) * 0.3 * env * 32767
+        )
+    sounds["boss_die"] = _make_sound(s)
 
     # --- Spider hiss ---
-    s = []
+    s = list[float]()
     dur = 0.25
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
         t = i / SAMPLE_RATE
         env = 1 - (i / n) ** 0.6
         freq = 3000 + math.sin(t * 80) * 1500
-        s.append(random.uniform(-1, 1) * 0.2 * env * 32767 +
-                 math.sin(2 * math.pi * freq * t) * 0.1 * env * 32767)
-    sounds['spider_hiss'] = _make_sound(s)
+        s.append(
+            random.uniform(-1, 1) * 0.2 * env * 32767
+            + math.sin(2 * math.pi * freq * t) * 0.1 * env * 32767
+        )
+    sounds["spider_hiss"] = _make_sound(s)
 
     # --- Spider die ---
-    s = []
+    s = list[float]()
     dur = 0.35
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
@@ -192,24 +210,28 @@ def init_sounds() -> Sfx:
         env = 1 - i / n
         freq = 800 - t * 600
         freq = max(freq, 100)
-        s.append(random.uniform(-1, 1) * 0.25 * env * 32767 +
-                 math.sin(2 * math.pi * freq * t) * 0.15 * env * 32767)
-    sounds['spider_die'] = _make_sound(s)
+        s.append(
+            random.uniform(-1, 1) * 0.25 * env * 32767
+            + math.sin(2 * math.pi * freq * t) * 0.15 * env * 32767
+        )
+    sounds["spider_die"] = _make_sound(s)
 
     # --- Door open creak ---
-    s = []
+    s = list[float]()
     dur = 0.4
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
         t = i / SAMPLE_RATE
         env = 1 - (i / n) ** 0.5
         freq = 200 + math.sin(t * 25) * 100 + t * 300
-        s.append(math.sin(2 * math.pi * freq * t) * 0.2 * env * 32767 +
-                 random.uniform(-1, 1) * 0.1 * env * 32767)
-    sounds['door_open'] = _make_sound(s)
+        s.append(
+            math.sin(2 * math.pi * freq * t) * 0.2 * env * 32767
+            + random.uniform(-1, 1) * 0.1 * env * 32767
+        )
+    sounds["door_open"] = _make_sound(s)
 
     # --- Door close thud ---
-    s = []
+    s = list[float]()
     dur = 0.3
     n = int(SAMPLE_RATE * dur)
     for i in range(n):
@@ -217,12 +239,14 @@ def init_sounds() -> Sfx:
         env = 1 - (i / n) ** 0.4
         freq = 120 - t * 60
         freq = max(freq, 50)
-        s.append(math.sin(2 * math.pi * freq * t) * 0.25 * env * 32767 +
-                 random.uniform(-1, 1) * 0.15 * env * 32767)
-    sounds['door_close'] = _make_sound(s)
+        s.append(
+            math.sin(2 * math.pi * freq * t) * 0.25 * env * 32767
+            + random.uniform(-1, 1) * 0.15 * env * 32767
+        )
+    sounds["door_close"] = _make_sound(s)
 
     # --- Looping background music ---
-    sounds['music'] = _make_sound(_synth_music())
+    sounds["music"] = _make_sound(_synth_music())
 
     return sounds
 

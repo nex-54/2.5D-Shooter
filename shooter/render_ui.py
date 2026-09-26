@@ -5,25 +5,42 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Iterable
+from collections.abc import Iterable
 
 import pygame
+import pygame.freetype
+
 from shooter.constants import (
-    WIDTH, HEIGHT,
-    WHITE, RED, GREEN, BLUE, GRAY, DARK, YELLOW,
-    MINIMAP_SCALE, MINIMAP_MARGIN,
+    BLUE,
+    DARK,
+    GRAY,
+    GREEN,
+    HEIGHT,
+    MINIMAP_MARGIN,
+    MINIMAP_SCALE,
+    RED,
+    WHITE,
+    WIDTH,
+    YELLOW,
 )
-from shooter import map as gmap
-from shooter.map import MAZE, MAP_H, MAP_W, BARRIER_TILE, DOOR_TILE
+from shooter.entities import Enemy, HealthPack, Rocket, WeaponPickup
+from shooter.map import BARRIER_TILE, DOOR_TILE, MAP_H, MAP_W, LevelState
 
 
 # ---------------------------------------------------------------------------
 # Minimap
 # ---------------------------------------------------------------------------
-def draw_minimap(screen: pygame.Surface, px: float, py: float, pa: float,
-                 enemies: list[Any], health_packs: list[Any],
-                 weapon_pickups: list[Any],
-                 rockets: Iterable[Any] = ()) -> None:
+def draw_minimap(
+    world: LevelState,
+    screen: pygame.Surface,
+    px: float,
+    py: float,
+    pa: float,
+    enemies: list[Enemy],
+    health_packs: list[HealthPack],
+    weapon_pickups: list[WeaponPickup],
+    rockets: Iterable[Rocket] = (),
+) -> None:
     """Draw the top-right corner minimap."""
     mw = MAP_W * MINIMAP_SCALE
     mh = MAP_H * MINIMAP_SCALE
@@ -36,25 +53,38 @@ def draw_minimap(screen: pygame.Surface, px: float, py: float, pa: float,
 
     for r in range(MAP_H):
         for c in range(MAP_W):
-            if MAZE[r][c] == 1:
-                pygame.draw.rect(screen, GRAY,
-                                 (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE,
-                                  MINIMAP_SCALE, MINIMAP_SCALE))
-            elif MAZE[r][c] == BARRIER_TILE:
-                pygame.draw.rect(screen, (180, 140, 60),
-                                 (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE,
-                                  MINIMAP_SCALE, MINIMAP_SCALE))
-            elif MAZE[r][c] == DOOR_TILE:
-                pygame.draw.rect(screen, (140, 80, 40),
-                                 (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE,
-                                  MINIMAP_SCALE, MINIMAP_SCALE))
+            if world.maze[r][c] == 1:
+                pygame.draw.rect(
+                    screen,
+                    GRAY,
+                    (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE),
+                )
+            elif world.maze[r][c] == BARRIER_TILE:
+                pygame.draw.rect(
+                    screen,
+                    (180, 140, 60),
+                    (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE),
+                )
+            elif world.maze[r][c] == DOOR_TILE:
+                pygame.draw.rect(
+                    screen,
+                    (140, 80, 40),
+                    (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE),
+                )
 
-    pygame.draw.rect(screen, YELLOW,
-                     (mx + gmap.EXIT_X * MINIMAP_SCALE, my + gmap.EXIT_Y * MINIMAP_SCALE,
-                      MINIMAP_SCALE, MINIMAP_SCALE))
-    pygame.draw.rect(screen, BLUE,
-                     (mx + 1 * MINIMAP_SCALE, my + 1 * MINIMAP_SCALE,
-                      MINIMAP_SCALE, MINIMAP_SCALE))
+    pygame.draw.rect(
+        screen,
+        YELLOW,
+        (
+            mx + world.exit_pos[0] * MINIMAP_SCALE,
+            my + world.exit_pos[1] * MINIMAP_SCALE,
+            MINIMAP_SCALE,
+            MINIMAP_SCALE,
+        ),
+    )
+    pygame.draw.rect(
+        screen, BLUE, (mx + 1 * MINIMAP_SCALE, my + 1 * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE)
+    )
 
     for hp_pack in health_packs:
         if hp_pack.active:
@@ -125,8 +155,16 @@ def draw_crosshair(screen: pygame.Surface) -> None:
     pygame.draw.line(screen, WHITE, (cx, cy - size), (cx, cy + size), 2)
 
 
-def draw_hud(screen: pygame.Surface, font: Any, hp: int, ammo: int,
-             kills: int, total: int, weapon_name: str, level: int) -> None:
+def draw_hud(
+    screen: pygame.Surface,
+    font: pygame.freetype.Font,
+    hp: int,
+    ammo: int,
+    kills: int,
+    total: int,
+    weapon_name: str,
+    level: int,
+) -> None:
     """Draw the bottom HUD bar (HP, ammo, kills, weapon name, level)."""
     pygame.draw.rect(screen, DARK, (20, HEIGHT - 50, 204, 24))
     bar_w = int(200 * max(hp, 0) / 100)
