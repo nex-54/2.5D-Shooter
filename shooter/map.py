@@ -12,9 +12,6 @@ import random
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-# ---------------------------------------------------------------------------
-# Tile values
-# ---------------------------------------------------------------------------
 FLOOR_TILE = 0
 WALL_TILE = 1
 EXIT_TILE = 2
@@ -24,9 +21,6 @@ DOOR_TILE = 5
 BARRIER_HEIGHT = 1 / 3  # in wall heights
 BARRIER_CLEARANCE = 0.3  # jump height that carries the player over a barrier
 
-# ---------------------------------------------------------------------------
-# Map dimensions (constant across levels)
-# ---------------------------------------------------------------------------
 MAP_W = 20
 MAP_H = 20
 
@@ -158,12 +152,8 @@ class LevelState:
         return None
 
 
-# ---------------------------------------------------------------------------
-# Procedural level generation
-# ---------------------------------------------------------------------------
 def _carve_maze(rng: random.Random, grid: list[list[int]]) -> None:
     """Recursive backtracker on odd cells. grid must start as all walls."""
-    # Visit cells at odd indices: (1,1), (1,3), ..., (MAP_W-2, MAP_H-2)
     stack = [START_TILE]
     start_c, start_r = START_TILE
     grid[start_r][start_c] = FLOOR_TILE
@@ -179,7 +169,6 @@ def _carve_maze(rng: random.Random, grid: list[list[int]]) -> None:
             stack.pop()
             continue
         nc, nr, dc, dr = rng.choice(neighbours)
-        # Knock down the wall between (c, r) and (nc, nr).
         grid[r + dr // 2][c + dc // 2] = FLOOR_TILE
         grid[nr][nc] = FLOOR_TILE
         visited.add((nc, nr))
@@ -222,7 +211,6 @@ def _place_exit(rng: random.Random, grid: list[list[int]]) -> tuple[int, int]:
         anchors.append((ac, ar))
     ac, ar = rng.choice(anchors)
 
-    # Choose whether to exit through the bottom or the right edge.
     if rng.random() < 0.5:
         for r in range(ar + 1, MAP_H - 1):
             grid[r][ac] = FLOOR_TILE
@@ -243,7 +231,6 @@ def _pick_boss_tile(rng: random.Random, grid: list[list[int]], ex: int, ey: int)
             if grid[r][c] == FLOOR_TILE and start_distance(c, r) > 5:
                 candidates.append((c, r))
     if not candidates:
-        # Fallback: any floor tile far from start.
         for r in range(MAP_H // 2, MAP_H - 1):
             for c in range(MAP_W // 2, MAP_W - 1):
                 if grid[r][c] == FLOOR_TILE:
@@ -264,7 +251,6 @@ def _place_doors(rng: random.Random, grid: list[list[int]], count: int) -> list[
             right = grid[r][c + 1]
             up = grid[r - 1][c]
             down = grid[r + 1][c]
-            # Corridor: walls on two opposite sides, floors on the other two.
             horizontal = up == down == WALL_TILE and left == right == FLOOR_TILE
             vertical = left == right == WALL_TILE and up == down == FLOOR_TILE
             if horizontal or vertical:
@@ -274,7 +260,6 @@ def _place_doors(rng: random.Random, grid: list[list[int]], count: int) -> list[
     for c, r in candidates:
         if len(placed) >= count:
             break
-        # Avoid doors adjacent to each other.
         if any(abs(c - pc) + abs(r - pr) < 3 for pc, pr in placed):
             continue
         grid[r][c] = DOOR_TILE
@@ -305,10 +290,9 @@ def generate_level(level: int, rng: random.Random) -> LevelState:
     """Build a fresh level using a caller-owned source of randomness."""
     grid = [[WALL_TILE] * MAP_W for _ in range(MAP_H)]
     _carve_maze(rng, grid)
-    # Slightly more loops on later levels keeps things interesting.
     _open_extra_walls(rng, grid, 20 + min(level, 5))
     start_c, start_r = START_TILE
-    grid[start_r][start_c] = FLOOR_TILE  # guarantee player start is floor
+    grid[start_r][start_c] = FLOOR_TILE
 
     ex, ey = _place_exit(rng, grid)
     doors = _place_doors(rng, grid, rng.randint(3, 5))

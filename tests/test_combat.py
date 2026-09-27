@@ -72,7 +72,6 @@ class GatlingSpinTests(unittest.TestCase):
             before = state.gatling_spin
             update_combat(state, 16, sfx)
             steps.append((state.gatling_spin - before) % (2 * math.pi))
-        # Each frame turns the barrels forward by less than half a turn, slowing to rest.
         self.assertGreater(steps[0], 0.0)
         self.assertTrue(all(step < math.pi for step in steps))
         self.assertTrue(all(a >= b for a, b in zip(steps, steps[1:], strict=False)))

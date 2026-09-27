@@ -2,6 +2,8 @@
 
 A retro first-person shooter built in Python with Pygame CE, using a from-scratch raycasting engine. **Every asset is procedurally generated at runtime** — no images, no audio files, no external dependencies beyond Pygame and NumPy.
 
+**This codebase is 100% AI-generated.**
+
 ## Screenshots
 
 | | |

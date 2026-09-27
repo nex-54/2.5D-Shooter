@@ -27,9 +27,6 @@ def _blocks_enemy(world: LevelState, x: float, y: float) -> bool:
     return world.is_obstacle(x, y) or world.tile_at(x, y) == EXIT_TILE
 
 
-# ---------------------------------------------------------------------------
-# Combat helpers
-# ---------------------------------------------------------------------------
 def hitscan(
     world: LevelState,
     enemies: list[Enemy],
@@ -80,9 +77,6 @@ def apply_hit(enemy: Enemy, sfx: Sfx, damage: int = 1) -> bool:
     return False
 
 
-# ---------------------------------------------------------------------------
-# Enemy base class
-# ---------------------------------------------------------------------------
 class Enemy:
     """A regular grunt. Subclasses retune the per-kind class attributes."""
 
@@ -208,9 +202,6 @@ class Enemy:
         return False
 
 
-# ---------------------------------------------------------------------------
-# Enemy variants
-# ---------------------------------------------------------------------------
 class Boss(Enemy):
     """A large boss enemy guarding the exit."""
 
@@ -278,9 +269,6 @@ class Spider(Enemy):
     minimap_color = (140, 80, 30)
 
 
-# ---------------------------------------------------------------------------
-# Pickups
-# ---------------------------------------------------------------------------
 class HealthPack:
     def __init__(self, x: float, y: float, rng: random.Random | None = None) -> None:
         self.rng = rng if rng is not None else random.Random()
@@ -324,9 +312,6 @@ class Rocket:
         self.trail_phase = 0.0
 
 
-# ---------------------------------------------------------------------------
-# Spawning
-# ---------------------------------------------------------------------------
 # Weapons that can lie on the floor; the nuke's single charge comes with the player.
 PICKUP_WEAPONS = (Weapon.PISTOL, Weapon.SHOTGUN, Weapon.GATLING, Weapon.ROCKETS)
 
@@ -344,8 +329,6 @@ def spawn_enemies(
 
     Tiles in used (such as the boss spawn) are skipped; tiles taken here are added.
     """
-    # Reject any spot that has line of sight to the player's spawn, so the
-    # player sees no enemies when a new level loads.
     psx, psy = world.player_spawn
     spots: list[tuple[float, float]] = []
     hidden_spots: list[tuple[float, float]] = []
@@ -411,7 +394,6 @@ def spawn_weapon_pickups(
     spots = _supply_spots(world, used)
     rng.shuffle(spots)
     n = min(SPAWN_WEAPON_PICKUP_COUNT, len(spots))
-    # Force one of each weapon type so the player can always find & unlock them.
     types = list(PICKUP_WEAPONS[:n])
     while len(types) < n:
         types.append(rng.choice(PICKUP_WEAPONS))

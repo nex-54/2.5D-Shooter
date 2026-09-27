@@ -134,9 +134,6 @@ def draw_world_sprites(
             draw_billboard(screen, font, sprite, camera, z_buffer)
 
 
-# ---------------------------------------------------------------------------
-# Enemy sprites
-# ---------------------------------------------------------------------------
 def draw_enemy(screen: pygame.Surface, enemy: Enemy, camera: Camera, z_buffer: DepthBuffer) -> None:
     """Draw an enemy, clipping only pixels covered by nearer geometry."""
     if not enemy.alive:
@@ -215,11 +212,9 @@ def _draw_spider(
     """Draw a spider enemy sprite."""
     sp_y = screen_y + sprite_h // 3
 
-    # Hits flash the body shaded white; legs, eyes, and fangs flash pure white.
     body = _shade(WHITE if hit else (70, 40, 20), shade)
     highlight = _shade(WHITE if hit else (100, 60, 30), shade, 1.3)
 
-    # abdomen
     abd_rx = max(sprite_w * 2 // 5, 3)
     abd_ry = max(sprite_h // 5, 3)
     abd_cx = screen_x
@@ -246,7 +241,6 @@ def _draw_spider(
             ],
         )
 
-    # cephalothorax
     ceph_r = max(sprite_w // 4, 3)
     ceph_cx = screen_x
     ceph_cy = sp_y + sprite_h // 6
@@ -256,7 +250,6 @@ def _draw_spider(
             screen, highlight, (ceph_cx - ceph_r // 4, ceph_cy - ceph_r // 4), ceph_r // 3
         )
 
-    # 8 legs
     leg_thickness = max(2, sprite_w // 16)
     leg_color = WHITE if hit else _shade((50, 25, 10), shade)
     for side in (-1, 1):
@@ -280,7 +273,6 @@ def _draw_spider(
             pygame.draw.line(screen, leg_color, (ceph_cx, ceph_cy), (knee_x, knee_y), leg_thickness)
             pygame.draw.line(screen, leg_color, (knee_x, knee_y), (tip_x, tip_y), leg_thickness)
 
-    # eyes
     if ceph_r > 4:
         eye_color = WHITE if hit else _shade((220, 20, 20), shade)
         eye_size = max(ceph_r // 5, 1)
@@ -289,7 +281,6 @@ def _draw_spider(
             ey = ceph_cy - ceph_r // 3 + oy * eye_size // 2
             pygame.draw.circle(screen, eye_color, (ex, ey), eye_size)
 
-    # fangs
     if ceph_r > 5:
         fang_color = WHITE if hit else _shade((180, 160, 130), shade)
         fang_len = ceph_r * 2 // 3
@@ -310,7 +301,6 @@ def _draw_spider(
             max(leg_thickness, 2),
         )
 
-    # HP bar
     if e.hp < e.max_hp:
         bar_w = sprite_w
         bar_h = max(3, sprite_h // 20)
@@ -337,7 +327,6 @@ def _draw_humanoid(
     """Draw a humanoid enemy sprite (regular, scout, or boss)."""
     is_boss = isinstance(e, Boss)
 
-    # --- Legs ---
     leg_top = screen_y + sprite_h * 3 // 4 - bob_offset
     leg_h = sprite_h // 4
     leg_w = max(sprite_w // 5, 2)
@@ -373,7 +362,6 @@ def _draw_humanoid(
         ),
     )
 
-    # --- Torso ---
     torso_top = screen_y + sprite_h * 2 // 7 - bob_offset
     torso_h = sprite_h * 3 // 7
     torso_w = sprite_w
@@ -399,7 +387,6 @@ def _draw_humanoid(
         (screen_x - torso_w // 2, belt_y, torso_w, max(torso_h // 8, 2)),
     )
 
-    # --- Arms ---
     arm_w = max(torso_w // 5, 2)
     arm_h = torso_h * 3 // 4
     arm_top = torso_top + torso_h // 8
@@ -430,7 +417,6 @@ def _draw_humanoid(
         hand_r,
     )
 
-    # --- Neck ---
     neck_w = max(torso_w // 5, 2)
     neck_h = max(sprite_h // 16, 2)
     neck_color = WHITE if hit else _shade((200, 160, 120), shade)
@@ -438,7 +424,6 @@ def _draw_humanoid(
         screen, neck_color, (screen_x - neck_w // 2, torso_top - neck_h, neck_w, neck_h)
     )
 
-    # --- Head ---
     head_r = max(sprite_w // 3, 4)
     head_cy = torso_top - neck_h - head_r
     skin_r, skin_g, skin_b = WHITE if hit else _shade((210, 170, 130), shade)
@@ -456,7 +441,6 @@ def _draw_humanoid(
         sh_color = (max(0, skin_r - 50), max(0, skin_g - 50), max(0, skin_b - 50))
         pygame.draw.circle(screen, sh_color, (sh_x, sh_y), sh_r)
 
-    # --- Eyes ---
     if head_r > 5:
         eye_off = head_r // 3
         eye_r_size = max(head_r // 4, 2)
@@ -490,7 +474,6 @@ def _draw_humanoid(
             2,
         )
 
-    # --- Mouth ---
     if head_r > 6:
         mouth_y = head_cy + head_r // 3
         mouth_w = head_r // 2
@@ -503,7 +486,6 @@ def _draw_humanoid(
             2,
         )
 
-    # --- Boss horns ---
     if is_boss and head_r > 5:
         horn_color = (180, 160, 60) if not hit else WHITE
         horn_h = head_r
@@ -526,7 +508,6 @@ def _draw_humanoid(
             ],
         )
 
-    # --- HP bar ---
     if e.hp < e.max_hp:
         bar_w = sprite_w if not is_boss else int(sprite_w * 1.5)
         bar_h = max(3, sprite_h // 20)
@@ -541,9 +522,6 @@ def _draw_humanoid(
             pygame.draw.rect(screen, (60, 0, 60), (bar_x, bar_y - bar_h - 2, bar_w, bar_h))
 
 
-# ---------------------------------------------------------------------------
-# Billboards & Pickups
-# ---------------------------------------------------------------------------
 def draw_billboard(
     screen: pygame.Surface,
     font: pygame.freetype.Font,
@@ -636,7 +614,6 @@ def draw_weapon_pickup(
     cy = _eye_row(corrected, camera.eye_height) + bob
     shade = max(0.4, min(1.0, 1.0 - (corrected - 1) / MAX_DEPTH))
 
-    # Color-coded pulsing halo so weapon type reads at any distance.
     base = WEAPONS[pack.weapon_type].color
     pulse = abs(math.sin(pack.anim_time * 2))
     halo_r = int(size * (1.0 + pulse * 0.25))
@@ -690,25 +667,21 @@ def _draw_pistol_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade
     x = cx - w // 2
     y = cy - h // 2
 
-    # Slide + barrel along the top
     slide_h = max(int(h * 0.3), 3)
     pygame.draw.rect(screen, metal, (x, y, w, slide_h))
     pygame.draw.rect(screen, metal_hi, (x, y, w, max(1, slide_h // 3)))
     pygame.draw.rect(screen, metal_dk, (x, y + slide_h - 1, w, 1))
-    # muzzle hole at the front
     muzzle_w = max(2, size // 10)
     pygame.draw.rect(
         screen, metal_dk, (x + w - muzzle_w, y + slide_h // 4, muzzle_w, max(1, slide_h // 2))
     )
 
-    # Grip sits at the rear, hanging below the slide
     grip_w = max(int(w * 0.4), 3)
     grip_h = h - slide_h
     pygame.draw.rect(screen, wood, (x, y + slide_h, grip_w, grip_h))
     pygame.draw.rect(screen, wood_hi, (x, y + slide_h, max(1, grip_w // 4), grip_h))
     pygame.draw.rect(screen, _shade((60, 40, 25), shade), (x + grip_w - 1, y + slide_h, 1, grip_h))
 
-    # Trigger + guard just ahead of the grip
     guard_w = max(int(w * 0.2), 2)
     guard_h = max(int(h * 0.22), 2)
     pygame.draw.rect(screen, metal, (x + grip_w, y + slide_h, guard_w, max(2, guard_h // 2)))
@@ -731,7 +704,6 @@ def _draw_gatling_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shad
     x = cx - w // 2
     y = cy - h // 2
 
-    # Housing (rear chunk)
     house_w = int(w * 0.55)
     house_h = int(h * 0.75)
     hx = x
@@ -740,12 +712,10 @@ def _draw_gatling_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shad
     pygame.draw.rect(screen, steel_hi, (hx, hy, house_w, max(1, house_h // 4)))
     pygame.draw.rect(screen, steel_dk, (hx, hy + house_h - 1, house_w, 1))
 
-    # Ammo belt dangling underneath
     belt_w = max(int(w * 0.3), 3)
     belt_h = max(int(h * 0.2), 2)
     pygame.draw.rect(screen, brass, (hx + 1, hy + house_h, belt_w, belt_h))
 
-    # Barrel cluster (circle + individual barrels hinted)
     bc_x = x + int(w * 0.65)
     bc_r = max(int(h * 0.4), 3)
     pygame.draw.circle(screen, steel_dk, (bc_x, cy), bc_r + 1)
@@ -755,7 +725,6 @@ def _draw_gatling_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shad
             dot = (int(bc_x + math.cos(ang) * bc_r * 0.55), int(cy + math.sin(ang) * bc_r * 0.55))
             pygame.draw.circle(screen, steel_dk, dot, max(1, bc_r // 4))
 
-    # Barrels poking forward
     barrels_w = int(w * 0.25)
     if barrels_w > 0:
         for off in (-bc_r // 2, 0, bc_r // 2):
@@ -775,7 +744,6 @@ def _draw_shotgun_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shad
     x = cx - w // 2
     y = cy - h // 2
 
-    # Stock (wood, rear)
     stock_w = int(w * 0.35)
     stock_h = h
     pygame.draw.rect(screen, wood, (x, y, stock_w, stock_h))
@@ -783,7 +751,6 @@ def _draw_shotgun_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shad
     # butt pad
     pygame.draw.rect(screen, metal_dk, (x, y, max(2, stock_w // 6), stock_h))
 
-    # Receiver (center dark block)
     recv_w = max(int(w * 0.15), 2)
     recv_h = max(int(h * 0.7), 2)
     rx = x + stock_w
@@ -791,12 +758,10 @@ def _draw_shotgun_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shad
     pygame.draw.rect(screen, metal_dk, (rx, ry, recv_w, recv_h))
     pygame.draw.rect(screen, metal, (rx, ry, recv_w, max(1, recv_h // 3)))
 
-    # Pump (small wooden forend just ahead of receiver)
     pump_w = max(int(w * 0.12), 2)
     pump_h = max(int(h * 0.5), 2)
     pygame.draw.rect(screen, wood, (rx + recv_w, cy - pump_h // 2, pump_w, pump_h))
 
-    # Long barrel
     bar_w = w - stock_w - recv_w - pump_w
     bar_h = max(int(h * 0.3), 2)
     bx = rx + recv_w + pump_w
@@ -819,14 +784,12 @@ def _draw_rocket_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade
     x = cx - w // 2
     y = cy - h // 2
 
-    # Main tube
     tube_l = x + max(2, w // 8)
     tube_w = int(w * 0.7)
     pygame.draw.rect(screen, tube, (tube_l, y, tube_w, h))
     pygame.draw.rect(screen, tube_hi, (tube_l, y, tube_w, max(1, h // 4)))
     pygame.draw.rect(screen, tube_dk, (tube_l, y + h - max(1, h // 5), tube_w, max(1, h // 5)))
 
-    # Warhead tip at the front
     tip_w = max(int(w * 0.12), 2)
     tip_x = tube_l - tip_w
     pygame.draw.polygon(
@@ -839,7 +802,6 @@ def _draw_rocket_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade
         ],
     )
 
-    # Rear exhaust cone
     cone_w = max(int(w * 0.15), 2)
     cone_x = tube_l + tube_w
     pygame.draw.polygon(
@@ -854,12 +816,10 @@ def _draw_rocket_icon(screen: pygame.Surface, cx: int, cy: int, size: int, shade
     )
     pygame.draw.rect(screen, metal_dk, (cone_x + cone_w - 1, y, 1, h))
 
-    # Sight on top
     sight_w = max(int(w * 0.14), 2)
     sight_h = max(int(h * 0.3), 2)
     pygame.draw.rect(screen, metal_dk, (tube_l + tube_w // 3, y - sight_h, sight_w, sight_h))
 
-    # Grip underneath
     grip_w = max(int(w * 0.1), 2)
     grip_h = max(int(h * 0.6), 3)
     pygame.draw.rect(screen, metal_dk, (tube_l + tube_w // 2, y + h, grip_w, grip_h))
@@ -878,7 +838,6 @@ def draw_rocket(
     cy = _eye_row(corrected, camera.eye_height)
 
     if rocket.exploded:
-        # Explosion: growing glow that fades.
         prog = 1.0 - max(0.0, rocket.explosion_timer) / EXPLOSION_DURATION
         prog = max(0.0, min(1.0, prog))
         base_size = int(HEIGHT / corrected * 1.6)
@@ -914,7 +873,6 @@ def draw_rocket(
     size = max(10, min(int(HEIGHT / corrected * 0.45), HEIGHT // 2))
     flicker = math.sin(rocket.trail_phase * 4.0) * 0.15 + 1.0
 
-    # Outer exhaust glow — big soft halo behind everything.
     glow_r = int(size * 1.2 * flicker)
     bounds = pygame.Rect(screen_x - glow_r, cy - glow_r, glow_r * 2, glow_r * 2)
     with z_buffer.sprite(screen, bounds, corrected) as layer:
@@ -928,12 +886,10 @@ def draw_rocket(
         pygame.draw.circle(glow, (255, 160, 50, 130), (glow_r, glow_r), max(2, int(glow_r * 0.65)))
         target.blit(glow, (screen_x - glow_r, cy - glow_r))
 
-        # Tail fins (4, cross layout) behind the body.
         fin_len = size // 2
         fin_thick = max(2, size // 6)
         fin_col = (70, 70, 80)
         fin_edge = (110, 110, 120)
-        # Horizontal fins
         pygame.draw.rect(
             target,
             fin_col,
@@ -942,7 +898,6 @@ def draw_rocket(
         pygame.draw.rect(
             target, fin_col, (screen_x + size // 2, cy - fin_thick // 2, fin_len, fin_thick)
         )
-        # Vertical fins
         pygame.draw.rect(
             target,
             fin_col,
@@ -951,7 +906,6 @@ def draw_rocket(
         pygame.draw.rect(
             target, fin_col, (screen_x - fin_thick // 2, cy + size // 2, fin_thick, fin_len)
         )
-        # Fin highlights
         pygame.draw.line(
             target,
             fin_edge,
@@ -967,7 +921,6 @@ def draw_rocket(
             1,
         )
 
-        # Rocket body — circular cross-section seen end-on.
         body_r = size // 2
         pygame.draw.circle(target, (170, 170, 180), (screen_x, cy), body_r)
         # Shading: lit from upper-left.
@@ -979,12 +932,10 @@ def draw_rocket(
         )
         pygame.draw.circle(target, (120, 120, 130), (screen_x, cy), body_r, max(1, body_r // 8))
 
-        # Engine bell — dark ring with a brighter interior (the flame).
         bell_r = max(3, int(body_r * 0.6))
         pygame.draw.circle(target, (30, 30, 35), (screen_x, cy), bell_r)
         pygame.draw.circle(target, (60, 60, 65), (screen_x, cy), bell_r, 1)
 
-        # Flame plume coming out of the bell toward the camera.
         plume_r = max(2, int(bell_r * (0.75 + 0.25 * flicker)))
         plume = pygame.Surface((plume_r * 2, plume_r * 2), pygame.SRCALPHA)
         pygame.draw.circle(plume, (255, 180, 60, 230), (plume_r, plume_r), plume_r)

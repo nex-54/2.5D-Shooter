@@ -137,7 +137,6 @@ def update_doors(state: GameState, dt: int, sfx: Sfx) -> None:
         elif phase == "open":
             anim["timer"] -= dt
             if anim["timer"] <= 0:
-                # Any overlap with the player's footprint keeps the door open.
                 occupied = _footprint_hits(
                     state.px, state.py, lambda x, y, dc=dc, dr=dr: (int(x), int(y)) == (dc, dr)
                 )
@@ -184,10 +183,8 @@ def update_pickups(state: GameState, dt: int, sfx: Sfx) -> None:
         wt = pack.weapon_type
         ai = WEAPONS[wt].ammo_pool
         if not state.owned[wt]:
-            # First time: unlock the weapon and hand over the starter ammo.
             state.owned[wt] = True
             state.ammo[ai] = min(state.ammo[ai] + WEAPONS[wt].pickup_ammo, MAX_AMMO[ai])
-            # Auto-switch if the new weapon outranks what we're holding.
             if wt > state.weapon:
                 state.switch_weapon(wt)
             pack.active = False

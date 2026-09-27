@@ -38,9 +38,6 @@ from shooter.occlusion import DepthBuffer
 from shooter.types import BgHit, DoorAnimMap, Textures, WallColumn
 
 
-# ---------------------------------------------------------------------------
-# Floor / Ceiling
-# ---------------------------------------------------------------------------
 def draw_floor_ceiling(
     world: LevelState,
     screen: pygame.Surface,
@@ -220,9 +217,6 @@ def _draw_fc_numpy(
     _fc_renderer.draw(world, screen, px, py, pa, eye_height)
 
 
-# ---------------------------------------------------------------------------
-# 3D Walls
-# ---------------------------------------------------------------------------
 def _draw_wall_slice(
     screen: pygame.Surface,
     x: int,

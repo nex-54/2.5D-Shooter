@@ -94,7 +94,6 @@ class FloorCeilingRenderingTests(unittest.TestCase):
                 ),
             ),
         )
-        # Return to the initial view after changing both angle and eye height.
         for (px, py, pa, eye), colors in (*cases, cases[0]):
             self.screen.fill((1, 2, 3))
             draw_floor_ceiling(self.world, self.screen, px, py, pa, self.textures, eye)
@@ -120,8 +119,7 @@ class FloorCeilingRenderingTests(unittest.TestCase):
                 np.testing.assert_array_equal(marked[x], marked[WIDTH // 2])
 
     def test_door_ceiling_updates_after_level_layout_changes(self) -> None:
-        # This pixel looks up at tile (3, 1). Move/remove doors in the same list,
-        # as generate_level does, to catch a stale mask from the previous level.
+        # This pixel looks up at tile (3, 1). Mutate the door list to catch a stale mask.
         for doors, color in (
             ([], (75, 90, 75)),
             ([(3, 1)], (55, 66, 77)),

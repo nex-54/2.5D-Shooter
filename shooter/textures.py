@@ -132,7 +132,6 @@ def generate_textures() -> Textures:
     _add_noise(door, 8)
     tex.surfaces["door"] = door
 
-    # --- Pre-extract 1px-wide column strips for each wall texture ---
     for name in ("wall", "exit", "barrier", "door"):
         cols: list[pygame.Surface] = []
         s = tex.surfaces[name]
@@ -163,7 +162,6 @@ def generate_icon() -> pygame.Surface:
             base = 46 - int(22 * t)
             icon.set_at((x, y), (base, base, base + 4, 255))
 
-    # Maze-wall corners (L-shapes in brick color — nods to the wall texture)
     brick = (150, 85, 55)
     brick_dk = (110, 60, 40)
     arm = 18
@@ -178,17 +176,16 @@ def generate_icon() -> pygame.Surface:
         pygame.draw.rect(icon, brick_dk, (vx, vy, thick, 1))
         pygame.draw.rect(icon, brick_dk, (hx_, hy_, 1, thick))
 
-    # Crosshair arms (white with dark outline for contrast)
     white = (235, 235, 235)
     shadow = (15, 15, 15)
     arm_len = 13
     arm_w = 4
     gap = 7
     for dx, dy, w, h in (
-        (0, -gap - arm_len, arm_w, arm_len),  # top
-        (0, gap, arm_w, arm_len),  # bottom
-        (-gap - arm_len, 0, arm_len, arm_w),  # left
-        (gap, 0, arm_len, arm_w),  # right
+        (0, -gap - arm_len, arm_w, arm_len),
+        (0, gap, arm_w, arm_len),
+        (-gap - arm_len, 0, arm_len, arm_w),
+        (gap, 0, arm_len, arm_w),
     ):
         rx = cx + dx - (w // 2 if w < arm_len else 0)
         ry = cy + dy - (h // 2 if h < arm_len else 0)

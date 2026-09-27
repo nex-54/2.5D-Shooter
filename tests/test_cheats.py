@@ -120,7 +120,7 @@ class CheatTests(unittest.TestCase):
                 self.assertEqual(self.state.hp, 1)
                 self.assertFalse(self.state.game_over)
                 self.assertEqual(self.state.damage_cooldown, 0)
-                self.assertTrue(enemy.attacking)  # AI still runs while the player is invulnerable.
+                self.assertTrue(enemy.attacking)
                 self.type_code("iddqd")
                 update_enemies(self.state, 16, self.sounds.sfx)
                 self.assertEqual(self.state.hp, 1 - enemy.damage)

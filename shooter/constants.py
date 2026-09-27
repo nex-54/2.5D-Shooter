@@ -6,11 +6,8 @@ import math
 from dataclasses import dataclass
 from enum import IntEnum
 
-# ---------------------------------------------------------------------------
-# Display
-# ---------------------------------------------------------------------------
 WIDTH, HEIGHT = 1024, 768
-FOV = math.pi / 3  # 60 degrees
+FOV = math.pi / 3
 HALF_FOV = FOV / 2
 NUM_RAYS = WIDTH
 MAX_DEPTH = 20
@@ -18,15 +15,9 @@ FPS = 60
 # Heights are in wall heights: the floor is at 0 and the ceiling at 1.
 EYE_HEIGHT = 0.5  # camera height while standing
 
-# ---------------------------------------------------------------------------
-# Minimap
-# ---------------------------------------------------------------------------
 MINIMAP_SCALE = 6  # each tile = 6 px on minimap
 MINIMAP_MARGIN = 16
 
-# ---------------------------------------------------------------------------
-# Colors
-# ---------------------------------------------------------------------------
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (200, 50, 50)
@@ -38,9 +29,6 @@ YELLOW = (240, 220, 60)
 CEIL = (60, 60, 80)
 FLOOR = (80, 70, 60)
 
-# ---------------------------------------------------------------------------
-# Textures / Audio
-# ---------------------------------------------------------------------------
 TEX_SIZE = 64
 SAMPLE_RATE = 22050
 
@@ -53,9 +41,6 @@ def normalize_angle(angle: float) -> float:
     return angle
 
 
-# ---------------------------------------------------------------------------
-# Player
-# ---------------------------------------------------------------------------
 PLAYER_MAX_HP = 100
 PLAYER_MOVE_SPEED = 0.003
 PLAYER_ROT_SPEED = 0.002
@@ -63,17 +48,11 @@ PLAYER_SPRINT_MULT = 1.8
 PLAYER_MARGIN = 0.2
 MOUSE_SENSITIVITY = 0.003
 
-# ---------------------------------------------------------------------------
-# Physics
-# ---------------------------------------------------------------------------
 # Peaks near 0.4 wall heights after 300 ms: over barriers, under the ceiling.
 JUMP_VELOCITY = 0.0027
 GRAVITY = 0.000009
 
 
-# ---------------------------------------------------------------------------
-# Weapons
-# ---------------------------------------------------------------------------
 class Weapon(IntEnum):
     """Weapon ids, which index WEAPONS and the player's owned flags."""
 
@@ -96,36 +75,30 @@ class WeaponDefinition:
 
 # Indexed by Weapon. Pistol and gatling share ammo pool 0.
 WEAPONS = (
-    WeaponDefinition("Pistol", 0, 200, 15, (230, 200, 70), True),  # brassy yellow
-    WeaponDefinition("Shotgun", 1, 600, 8, (220, 60, 40)),  # red
-    WeaponDefinition("Gatling", 0, 60, 100, (180, 180, 200)),  # cold steel
-    WeaponDefinition("Rockets", 2, 800, 5, (255, 120, 40)),  # orange
-    WeaponDefinition("Nuke", 3, 1200, 0, (200, 40, 40), True),  # detonator button
+    WeaponDefinition("Pistol", 0, 200, 15, (230, 200, 70), True),
+    WeaponDefinition("Shotgun", 1, 600, 8, (220, 60, 40)),
+    WeaponDefinition("Gatling", 0, 60, 100, (180, 180, 200)),
+    WeaponDefinition("Rockets", 2, 800, 5, (255, 120, 40)),
+    WeaponDefinition("Nuke", 3, 1200, 0, (200, 40, 40), True),
 )
 INITIAL_AMMO = (50, 0, 0, 1)
 MAX_AMMO = (999, 50, 30, 1)
 EMPTY_CLICK_DELAY = 200  # ms before another empty-click sound
 
-# ---------------------------------------------------------------------------
-# Combat
-# ---------------------------------------------------------------------------
 DAMAGE_COOLDOWN_MS = 500
 PICKUP_RADIUS = 0.6
-PISTOL_DAMAGE = 2  # damage per pistol shot
+PISTOL_DAMAGE = 2
 SHOTGUN_PELLETS = 8
 SHOTGUN_SPREAD = 0.1  # max pellet angle off the crosshair (radians)
 SHOTGUN_RANGE = 6
 GATLING_SPREAD = 0.08
 ROCKET_SPEED = 0.008  # world units per ms
-ROCKET_HIT_RADIUS = 0.6  # direct-hit proximity to enemies
-ROCKET_BLAST_RADIUS = 3.0  # splash radius
+ROCKET_HIT_RADIUS = 0.6
+ROCKET_BLAST_RADIUS = 3.0
 ROCKET_MAX_HITS = 12  # damage at the epicenter
 ROCKET_SELF_DAMAGE = 30  # max hp damage to player at the epicenter
 EXPLOSION_DURATION = 320  # ms of explosion visual
 
-# ---------------------------------------------------------------------------
-# Timing
-# ---------------------------------------------------------------------------
 FOOTSTEP_WALK_INTERVAL = 350  # ms between footstep sounds
 FOOTSTEP_SPRINT_INTERVAL = 200
 DOOR_OPEN_DURATION = 5000  # ms before a door auto-closes
@@ -134,9 +107,6 @@ DOOR_ANIM_DURATION = 400  # ms for a door to slide open or closed
 LEVEL_BANNER_DURATION = 1200  # ms the "LEVEL N" banner stays up
 SPAWN_GRACE_DURATION = 2000  # ms without enemy damage while the player gets oriented
 
-# ---------------------------------------------------------------------------
-# Spawning
-# ---------------------------------------------------------------------------
 SPAWN_REGULAR_COUNT = 7
 SPAWN_SCOUT_COUNT = 5
 SPAWN_SPIDER_COUNT = 4

@@ -14,27 +14,19 @@ import numpy as np
 import pygame
 from numpy.typing import NDArray
 
-# ---------------------------------------------------------------------------
-# Sound effects
-# ---------------------------------------------------------------------------
-# Every effect sound.init_sounds() synthesizes, so misspelled names fail type checks.
 SoundName = Literal[
-    # weapons
     "pistol",
     "shotgun",
     "gatling",
     "rocket_fire",
     "explosion",
     "empty",
-    # player
     "step0",
     "step1",
     "pickup",
-    # world
     "door_open",
     "door_close",
     "music",
-    # enemies
     "enemy_hurt",
     "enemy_die",
     "enemy_attack",
@@ -43,13 +35,9 @@ SoundName = Literal[
     "spider_hiss",
     "spider_die",
 ]
-# Mapping of SFX name -> loaded pygame Sound, built by sound.init_sounds().
 Sfx = dict[SoundName, pygame.mixer.Sound]
 
 
-# ---------------------------------------------------------------------------
-# Textures
-# ---------------------------------------------------------------------------
 @dataclass
 class Textures:
     """Generated assets, grouped by representation with checked value types.
@@ -71,9 +59,6 @@ class KeyState(Protocol):
     def __getitem__(self, key: int, /) -> bool: ...
 
 
-# ---------------------------------------------------------------------------
-# Door animation state
-# ---------------------------------------------------------------------------
 DoorPhase = Literal["opening", "open", "closing"]
 
 
@@ -96,9 +81,6 @@ class DoorAnim(TypedDict):
 DoorAnimMap = dict[tuple[int, int], DoorAnim]
 
 
-# ---------------------------------------------------------------------------
-# Raycaster output
-# ---------------------------------------------------------------------------
 class BgHit(NamedTuple):
     """A ray hit behind a barrier or an animating door.
 

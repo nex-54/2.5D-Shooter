@@ -16,7 +16,7 @@ _WEAPON_KEYS = {
     pygame.K_4: Weapon.ROCKETS,
     pygame.K_0: Weapon.NUKE,
 }
-_CHEAT_BUFFER_SIZE = 5  # Both IDDQD and IDKFA are five letters.
+_CHEAT_BUFFER_SIZE = 5
 
 
 def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bool:
@@ -29,7 +29,6 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
         elif event.type == pygame.KEYDOWN:
             pressed_scancodes.add(event.scancode)
             if event.key == pygame.K_ESCAPE:
-                # Esc pauses; the game-over screen has nothing to pause.
                 if state.game_over:
                     return False
                 ignore_mouse_motion = True

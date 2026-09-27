@@ -36,7 +36,6 @@ class PickupRenderingTests(unittest.TestCase):
         surface_type = pygame.Surface
 
         def bounded_surface(size: tuple[int, int], flags: int = 0) -> pygame.Surface:
-            # Reject oversized buffers before allocating them.
             self.assertLessEqual(size[0], WIDTH)
             self.assertLessEqual(size[1], HEIGHT)
             return surface_type(size, flags)

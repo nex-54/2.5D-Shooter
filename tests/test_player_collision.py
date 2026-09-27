@@ -57,7 +57,6 @@ class PlayerCollisionTests(unittest.TestCase):
             start_level.assert_called_once_with(self.state, self.state.level + 1)
 
     def test_footprint_keeps_its_margin_from_corners_and_glancing_walls(self) -> None:
-        # A diagonal walk past an outer corner, and a walk that glances off a wall.
         for wall_tiles, start, angle in (
             ([(6, 6)], (5.0, 5.0), math.pi / 4),
             ([(8, row) for row in range(1, gmap.MAP_H - 1)], (6.5, 2.5), math.radians(80)),

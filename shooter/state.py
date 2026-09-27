@@ -100,7 +100,6 @@ class GameState:
         self.level_rng = random.Random(self.seed)
         self.rng = random.Random(self.seed)
 
-        # Weapons carry over between levels.
         self.weapon: Weapon = Weapon.PISTOL
         self.ammo: list[int] = list(INITIAL_AMMO)
         self.owned = [weapon.initially_owned for weapon in WEAPONS]
@@ -120,16 +119,13 @@ class GameState:
         self.world = world
         self.level = level
 
-        # Player position & physics
         self.spawn_player()
 
-        # Player combat
-        self.hp = PLAYER_MAX_HP  # refill health on each new level
+        self.hp = PLAYER_MAX_HP
         self.damage_cooldown = 0
-        self.kills = 0  # per-level kill counter so HUD "X/Y" stays meaningful
+        self.kills = 0
         self.cheat_buffer = ""
 
-        # Weapon activity (the arsenal itself carries over)
         self.shooting = False
         self.weapon_cooldowns: list[int] = [0] * len(WEAPONS)
         self.mouse_held = False
@@ -141,7 +137,6 @@ class GameState:
         self.level_banner_timer = 0
         self.spawn_grace = 0
 
-        # Entities (populated by start_level)
         self.enemies: list[Enemy] = []
         self.boss: Boss | None = None
         self.total_enemies = 0
@@ -187,7 +182,6 @@ def start_level(state: GameState, level: int) -> None:
     """
     state.enter_level(gmap.generate_level(level, state.level_rng), level)
 
-    # Difficulty scaling: +1 of each enemy type per level.
     bonus = level - 1
     boss_tile = (int(state.world.boss_spawn[0]), int(state.world.boss_spawn[1]))
     # Reserve the boss and all supplies before enemies consume the free cells.
@@ -226,6 +220,4 @@ def check_win_lose(state: GameState) -> None:
         and int(state.py) == state.world.exit_pos[1]
         and state.exit_open
     ):
-        # Advance to the next randomly-generated level. Ammo and weapons carry
-        # over; HP refills (see start_level).
         start_level(state, state.level + 1)

@@ -49,7 +49,6 @@ def draw_level_banner(
     """Draw a brief 'LEVEL N' banner that fades out as its timer runs down."""
     if state.level_banner_timer <= 0:
         return
-    # Fade alpha based on remaining time (full for first 400 ms, then linear).
     fade_ms = LEVEL_BANNER_DURATION - 400
     remaining = max(0, state.level_banner_timer)
     alpha = 255 if remaining > fade_ms else int(255 * remaining / fade_ms)

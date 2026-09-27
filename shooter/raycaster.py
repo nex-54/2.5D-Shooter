@@ -21,7 +21,6 @@ def _cast_single(
     stop_func: Callable[[float, float], bool],
 ) -> tuple[float, float, int, int, tuple[int, int]]:
     """Cast one ray, stopping at tiles where stop_func returns True."""
-    # horizontal intersections
     y_hor: float
     dy: int
     if sin_a > 0:
@@ -53,7 +52,6 @@ def _cast_single(
         else:
             depth_h = MAX_DEPTH
 
-    # vertical intersections
     x_ver: float
     dx: int
     if cos_a > 0:

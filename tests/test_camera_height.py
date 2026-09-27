@@ -26,7 +26,6 @@ class CameraHeightTests(unittest.TestCase):
         self.screen = pygame.Surface((WIDTH, HEIGHT))
 
     def test_horizon_stays_level_at_the_top_of_a_jump(self) -> None:
-        # A red floor and blue ceiling show which plane each row samples.
         red = np.zeros((TEX_SIZE, TEX_SIZE, 3), np.float32)
         red[..., 0] = 200
         blue = np.zeros((TEX_SIZE, TEX_SIZE, 3), np.float32)

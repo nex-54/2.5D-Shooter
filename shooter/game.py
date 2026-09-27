@@ -42,7 +42,6 @@ def run_game(
             continue
 
         if state.paused:
-            # Hold the last frame under the overlay; free the mouse and mute.
             if paused_frame is None:
                 paused_frame = screen.copy()
                 draw_pause_overlay(paused_frame, font, big_font)

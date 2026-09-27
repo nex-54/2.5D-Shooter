@@ -29,9 +29,6 @@ from shooter.entities import Boss, Enemy, HealthPack, Rocket, WeaponPickup
 from shooter.map import BARRIER_TILE, DOOR_TILE, MAP_H, MAP_W, START_TILE, WALL_TILE, LevelState
 
 
-# ---------------------------------------------------------------------------
-# Minimap
-# ---------------------------------------------------------------------------
 def draw_minimap(
     world: LevelState,
     screen: pygame.Surface,
@@ -142,9 +139,6 @@ def draw_minimap(
     pygame.draw.rect(screen, WHITE, (mx, my, mw, mh), 1)
 
 
-# ---------------------------------------------------------------------------
-# HUD elements
-# ---------------------------------------------------------------------------
 def draw_crosshair(screen: pygame.Surface) -> None:
     """Draw the center crosshair."""
     cx, cy = WIDTH // 2, HEIGHT // 2
