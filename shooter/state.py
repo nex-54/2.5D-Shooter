@@ -50,8 +50,10 @@ class GameState:
 
         Player combat
             hp              -- remaining hit points; <= 0 triggers game_over.
+            god_mode        -- cheat toggle preventing all player damage; survives levels.
             damage_cooldown -- ms of i-frames remaining after taking a hit.
             kills           -- enemies killed this level (drives HUD "X / Y").
+            cheat_buffer    -- recent letter key presses, cleared on pause/level entry.
 
         Weapons (see constants.Weapon and constants.WEAPONS)
             weapon       -- currently equipped Weapon.
@@ -102,6 +104,7 @@ class GameState:
         self.weapon: Weapon = Weapon.PISTOL
         self.ammo: list[int] = list(INITIAL_AMMO)
         self.owned = [weapon.initially_owned for weapon in WEAPONS]
+        self.god_mode = False
 
         self.step_index = 0
         self.game_time = 0.0
@@ -124,6 +127,7 @@ class GameState:
         self.hp = PLAYER_MAX_HP  # refill health on each new level
         self.damage_cooldown = 0
         self.kills = 0  # per-level kill counter so HUD "X/Y" stays meaningful
+        self.cheat_buffer = ""
 
         # Weapon activity (the arsenal itself carries over)
         self.shooting = False

@@ -132,7 +132,13 @@ def update_enemies(state: GameState, dt: int, sfx: Sfx) -> None:
         state.spawn_grace -= dt
     for e in state.enemies:
         e.update(state.world, state.px, state.py, dt)
-        if e.alive and state.hp > 0 and state.damage_cooldown <= 0 and state.spawn_grace <= 0:
+        if (
+            e.alive
+            and state.hp > 0
+            and not state.god_mode
+            and state.damage_cooldown <= 0
+            and state.spawn_grace <= 0
+        ):
             dist = math.hypot(e.x - state.px, e.y - state.py)
             if (
                 dist < e.attack_range
@@ -167,6 +173,7 @@ def _detonate_rocket(state: GameState, rocket: Rocket, sfx: Sfx) -> None:
     distance = math.hypot(state.px - rocket.x, state.py - rocket.y)
     if (
         distance < ROCKET_BLAST_RADIUS
+        and not state.god_mode
         and state.damage_cooldown <= 0
         and state.world.has_line_of_sight(rocket.x, rocket.y, state.px, state.py)
     ):

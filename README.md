@@ -64,6 +64,14 @@ python -m shooter
 | Pause / resume | `Esc` (a click also resumes) |
 | Quit | `Q` while paused, `Esc` on the game-over screen |
 
+Type these cheat codes during gameplay (no Enter needed; case-insensitive):
+
+- `IDDQD` — toggle god mode, preventing enemy and rocket self-damage. The HUD shows `[GOD]` while active.
+- `IDKFA` — unlock all five weapons and refill every ammo pool to its maximum.
+
+Each code plays a pickup sound when accepted. Cheats carry over between levels and reset on restart.
+Codes are disabled while paused or on the game-over screen.
+
 ## Development Checks
 
 With the virtual environment activated, install the development tools:

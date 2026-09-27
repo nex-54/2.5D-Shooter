@@ -162,13 +162,15 @@ def draw_hud(
     total: int,
     weapon_name: str,
     level: int,
+    god_mode: bool = False,
 ) -> None:
     """Draw the bottom HUD bar (HP, ammo, kills, weapon name, level)."""
     pygame.draw.rect(screen, DARK, (20, HEIGHT - 50, 204, 24))
     bar_w = int(200 * max(hp, 0) / PLAYER_MAX_HP)
     bar_color = GREEN if hp > 40 else RED
     pygame.draw.rect(screen, bar_color, (22, HEIGHT - 48, bar_w, 20))
-    hp_text, _ = font.render(f"HP: {max(0, hp)}", WHITE)
+    hp_label = f"HP: {max(0, hp)}" + (" [GOD]" if god_mode else "")
+    hp_text, _ = font.render(hp_label, YELLOW if god_mode else WHITE)
     screen.blit(hp_text, (24, HEIGHT - 48))
 
     ammo_text, _ = font.render(f"Ammo: {ammo}", WHITE)

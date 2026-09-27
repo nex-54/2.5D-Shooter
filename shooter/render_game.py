@@ -131,6 +131,7 @@ def draw_frame(
         state.total_enemies,
         WEAPONS[state.weapon].name,
         state.level,
+        god_mode=state.god_mode,
     )
 
     door_pos = state.world.find_door_in_front(state.px, state.py, state.pa)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pygame
 
 from shooter.combat import fire_weapon
-from shooter.constants import MOUSE_SENSITIVITY, Weapon
+from shooter.constants import MAX_AMMO, MOUSE_SENSITIVITY, WEAPONS, Weapon
 from shooter.state import GameState, reset_game
 from shooter.types import DoorAnim, Sfx
 
@@ -16,6 +16,7 @@ _WEAPON_KEYS = {
     pygame.K_4: Weapon.ROCKETS,
     pygame.K_0: Weapon.NUKE,
 }
+_CHEAT_BUFFER_SIZE = 5  # Both IDDQD and IDKFA are five letters.
 
 
 def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bool:
@@ -43,6 +44,8 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
                 continue
             if event.scancode == pygame.KSCAN_R and state.game_over:
                 reset_game(state)
+            if not state.game_over and state.hp > 0:
+                _handle_cheat_key(state, event.key, sfx)
             if event.key in _WEAPON_KEYS and not state.game_over:
                 new_weapon = _WEAPON_KEYS[event.key]
                 if state.owned[new_weapon]:
@@ -77,10 +80,28 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
     return True
 
 
+def _handle_cheat_key(state: GameState, key: int, sfx: Sfx) -> None:
+    """Watch recent letter presses without swallowing normal gameplay controls."""
+    # Pygame letter keycodes stay lowercase with Shift or Caps Lock held.
+    if not pygame.K_a <= key <= pygame.K_z:
+        return
+    state.cheat_buffer = (state.cheat_buffer + chr(key))[-_CHEAT_BUFFER_SIZE:]
+    if state.cheat_buffer == "iddqd":
+        state.god_mode = not state.god_mode
+    elif state.cheat_buffer == "idkfa":
+        state.owned = [True] * len(WEAPONS)
+        state.ammo = list(MAX_AMMO)
+    else:
+        return
+    state.cheat_buffer = ""
+    sfx["pickup"].play()
+
+
 def _pause(state: GameState, pressed_scancodes: set[int]) -> None:
     """Freeze gameplay, dropping held input so nothing sticks on resume."""
     state.paused = True
     state.mouse_held = False
+    state.cheat_buffer = ""
     pressed_scancodes.clear()
 
 
