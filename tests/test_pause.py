@@ -97,6 +97,15 @@ class PauseTests(unittest.TestCase):
         self.assertFalse(self.state.paused)
         self.assertFalse(self.send(key(pygame.K_ESCAPE)))
 
+    def test_losing_focus_on_game_over_drops_held_input(self) -> None:
+        self.state.game_over = True
+        self.state.mouse_held = True
+        self.pressed.add(pygame.KSCAN_W)
+        self.send(pygame.event.Event(pygame.WINDOWFOCUSLOST))
+        self.assertFalse(self.state.paused)
+        self.assertFalse(self.state.mouse_held)
+        self.assertEqual(self.pressed, set())
+
 
 if __name__ == "__main__":
     unittest.main()

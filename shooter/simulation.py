@@ -101,8 +101,9 @@ def update_player(
     if keys[pygame.K_SPACE] and state.on_ground:
         state.jump_vel = JUMP_VELOCITY
         state.on_ground = False
+    # Integrate constant acceleration exactly so long frames don't shorten jumps.
+    state.jump_height += state.jump_vel * dt - 0.5 * GRAVITY * dt**2
     state.jump_vel -= GRAVITY * dt
-    state.jump_height += state.jump_vel * dt
     if state.jump_height <= 0:
         state.jump_height = 0
         state.jump_vel = 0

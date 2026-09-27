@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 # ---------------------------------------------------------------------------
@@ -92,10 +93,22 @@ class LevelState:
         At grid corners, check both neighboring tiles so sight cannot pass through
         a diagonal wall seam. Barriers remain transparent at eye level.
         """
+        hit = self._first_tile_hit(x1, y1, x2, y2, self.blocks_sight)
+        return None if hit is None else hit[0]
+
+    def _first_tile_hit(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        blocks: Callable[[float, float], bool],
+    ) -> tuple[float, tuple[int, int]] | None:
+        """Return the first blocking tile and contact fraction along a grid segment."""
         cx, cy = math.floor(x1), math.floor(y1)
         end_x, end_y = math.floor(x2), math.floor(y2)
-        if self.blocks_sight(cx, cy):
-            return 0.0
+        if blocks(cx, cy):
+            return 0.0, (cx, cy)
 
         dx = x2 - x1
         dy = y2 - y1
@@ -109,16 +122,18 @@ class LevelState:
 
             fraction = max(0.0, min(1.0, min(next_x, next_y)))
             if math.isclose(next_x, next_y, rel_tol=1e-12, abs_tol=1e-12):
-                if self.blocks_sight(cx + step_x, cy) or self.blocks_sight(cx, cy + step_y):
-                    return fraction
+                if blocks(cx + step_x, cy):
+                    return fraction, (cx + step_x, cy)
+                if blocks(cx, cy + step_y):
+                    return fraction, (cx, cy + step_y)
                 cx += step_x
                 cy += step_y
             elif next_x < next_y:
                 cx += step_x
             else:
                 cy += step_y
-            if self.blocks_sight(cx, cy):
-                return fraction
+            if blocks(cx, cy):
+                return fraction, (cx, cy)
         return None
 
     def has_line_of_sight(self, x1: float, y1: float, x2: float, y2: float) -> bool:
@@ -128,18 +143,18 @@ class LevelState:
     def find_door_in_front(
         self, px: float, py: float, pa: float, max_range: float = 2.5
     ) -> tuple[int, int] | None:
-        """Find the closest door tile the player is facing, within range."""
-        cos_a = math.cos(pa)
-        sin_a = math.sin(pa)
-        for i in range(1, int(max_range * 8) + 1):
-            d = i / 8.0
-            cx = px + cos_a * d
-            cy = py + sin_a * d
-            t = self.tile_at(cx, cy)
-            if t == DOOR_TILE:
-                return (int(cx), int(cy))
-            if t == WALL_TILE or t == EXIT_TILE or t == BARRIER_TILE:
-                return None
+        """Find a door if it is the first solid tile along the interaction ray."""
+        if max_range <= 0:
+            return None
+        hit = self._first_tile_hit(
+            px,
+            py,
+            px + math.cos(pa) * max_range,
+            py + math.sin(pa) * max_range,
+            self.is_solid,
+        )
+        if hit is not None and self.tile_at(*hit[1]) == DOOR_TILE:
+            return hit[1]
         return None
 
 

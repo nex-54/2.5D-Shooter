@@ -9,22 +9,12 @@ from unittest.mock import MagicMock, patch
 import pygame
 
 from shooter import map as gmap
-from shooter.constants import PLAYER_MARGIN
+from shooter.constants import GRAVITY, JUMP_VELOCITY, PLAYER_MARGIN
 from shooter.entities import Boss
 from shooter.simulation import update_doors, update_player
 from shooter.state import GameState, check_win_lose
 from shooter.types import DoorAnim
-from tests.support import open_world
-
-
-class Keys:
-    """Stand-in for pygame.key.get_pressed() with only the given keys down."""
-
-    def __init__(self, *down: int) -> None:
-        self.down = set(down)
-
-    def __getitem__(self, key: int) -> bool:
-        return key in self.down
+from tests.support import Keys, open_world
 
 
 def distance_to_tile(x: float, y: float, col: int, row: int) -> float:
@@ -112,6 +102,29 @@ class PlayerCollisionTests(unittest.TestCase):
         self.assertTrue(self.state.on_ground)
         self.assertGreater(peak, 0.35)
         self.assertLess(peak, 0.45)
+
+    def test_jump_trajectory_is_independent_of_frame_intervals(self) -> None:
+        schedules = [[dt] * (300 // dt) for dt in (10, 20, 30, 50)]
+        schedules.append([17, 43, 31, 9] * 3)
+        for schedule in schedules:
+            with self.subTest(frame_intervals=schedule[:4]):
+                self.state.spawn_player()
+                elapsed = 0
+                for index, dt in enumerate(schedule):
+                    keys = Keys(pygame.K_SPACE) if index == 0 else Keys()
+                    update_player(self.state, dt, keys, set(), self.sfx)
+                    elapsed += dt
+                    expected = JUMP_VELOCITY * elapsed - 0.5 * GRAVITY * elapsed**2
+                    self.assertAlmostEqual(self.state.jump_height, expected)
+                    self.assertFalse(self.state.on_ground)
+                self.assertAlmostEqual(self.state.jump_height, 0.405)
+                for dt in schedule:
+                    update_player(self.state, dt, Keys(), set(), self.sfx)
+                self.assertAlmostEqual(self.state.jump_height, 0, places=10)
+                # Step past landing to avoid relying on floating-point equality at t=600.
+                update_player(self.state, 1, Keys(), set(), self.sfx)
+                self.assertTrue(self.state.on_ground)
+                self.assertEqual(self.state.jump_vel, 0)
 
     def test_doors_stay_open_while_the_footprint_overlaps_them(self) -> None:
         self.state.py = 5.5

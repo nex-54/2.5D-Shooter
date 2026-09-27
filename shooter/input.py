@@ -44,6 +44,8 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
                 continue
             if event.scancode == pygame.KSCAN_R and state.game_over:
                 reset_game(state)
+                pressed_scancodes.clear()
+                continue
             if not state.game_over and state.hp > 0:
                 _handle_cheat_key(state, event.key, sfx)
             if event.key in _WEAPON_KEYS and not state.game_over:
@@ -62,6 +64,9 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
         elif event.type == pygame.KEYUP:
             pressed_scancodes.discard(event.scancode)
         elif event.type == pygame.WINDOWFOCUSLOST:
+            # Key/button releases may happen outside our window, even after death.
+            pressed_scancodes.clear()
+            state.mouse_held = False
             if not state.game_over:
                 _pause(state, pressed_scancodes)
                 ignore_mouse_motion = True

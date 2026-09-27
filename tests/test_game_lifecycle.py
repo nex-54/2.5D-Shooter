@@ -145,3 +145,14 @@ class GameLifecycleTests(unittest.TestCase):
         self.assertEqual(self.state.weapon_cooldowns, [0] * len(WEAPONS))
         self.assertEqual(self.state.rockets, [])
         self.assertEqual(self.state.world.maze, original_maze)
+
+    def test_restart_drops_movement_keys_from_the_previous_life(self) -> None:
+        self.state.game_over = True
+        pressed = {pygame.KSCAN_W, pygame.KSCAN_A}
+        restart = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r, scancode=pygame.KSCAN_R)
+        with patch("shooter.input.pygame.event.get", return_value=[restart]):
+            handle_events(self.state, self.sfx, pressed)
+        self.assertFalse(self.state.game_over)
+        self.assertEqual(pressed, set())
+        self.assertFalse(update_game(self.state, 16, Keys(), pressed, self.sfx))
+        self.assertEqual((self.state.px, self.state.py), self.state.world.player_spawn)
