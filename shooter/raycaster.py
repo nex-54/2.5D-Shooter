@@ -39,7 +39,7 @@ def _cast_single(
     tile_h_coords = (-1, -1)
     if dy != 0:
         for _ in range(MAX_DEPTH):
-            depth_v_h = (y_hor - py) / sin_a if sin_a != 0 else MAX_DEPTH
+            depth_v_h = (y_hor - py) / sin_a
             hx = px + depth_v_h * cos_a
             check_y = y_hor + (0 if dy > 0 else -0.001)
             if stop_func(hx, check_y):
@@ -49,8 +49,6 @@ def _cast_single(
                 tile_h_coords = (int(hx), int(check_y))
                 break
             y_hor += dy
-        else:
-            depth_h = MAX_DEPTH
 
     x_ver: float
     dx: int
@@ -70,7 +68,7 @@ def _cast_single(
     tile_v_coords = (-1, -1)
     if dx != 0:
         for _ in range(MAX_DEPTH):
-            depth_h_v = (x_ver - px) / cos_a if cos_a != 0 else MAX_DEPTH
+            depth_h_v = (x_ver - px) / cos_a
             vy = py + depth_h_v * sin_a
             check_x = x_ver + (0 if dx > 0 else -0.001)
             if stop_func(check_x, vy):
@@ -80,8 +78,6 @@ def _cast_single(
                 tile_v_coords = (int(check_x), int(vy))
                 break
             x_ver += dx
-        else:
-            depth_v = MAX_DEPTH
 
     if depth_v < depth_h:
         return depth_v, hit_vx % 1, 0, tile_v, tile_v_coords

@@ -28,7 +28,7 @@ from shooter.constants import (
 from shooter.map import BARRIER_CLEARANCE, BARRIER_TILE, DOOR_TILE, FLOOR_TILE
 from shooter.sound import FOOTSTEP_SOUNDS
 from shooter.state import GameState, check_win_lose
-from shooter.types import KeyState, Sfx
+from shooter.types import DoorAnim, KeyState, Sfx
 
 
 def _footprint_hits(x: float, y: float, solid: Callable[[float, float], bool]) -> bool:
@@ -63,16 +63,11 @@ def update_player(
         state.pa += PLAYER_ROT_SPEED * dt
     state.pa %= 2 * math.pi
 
-    move = 0
-    strafe = 0
-    if pygame.KSCAN_W in pressed_scancodes or keys[pygame.K_UP]:
-        move = 1
-    if pygame.KSCAN_S in pressed_scancodes or keys[pygame.K_DOWN]:
-        move = -1
-    if pygame.KSCAN_A in pressed_scancodes:
-        strafe = -1
-    if pygame.KSCAN_D in pressed_scancodes:
-        strafe = 1
+    # Opposing keys cancel out rather than letting one direction win.
+    forward = pygame.KSCAN_W in pressed_scancodes or keys[pygame.K_UP]
+    back = pygame.KSCAN_S in pressed_scancodes or keys[pygame.K_DOWN]
+    move = int(forward) - int(back)
+    strafe = int(pygame.KSCAN_D in pressed_scancodes) - int(pygame.KSCAN_A in pressed_scancodes)
 
     sprinting = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
     sp = PLAYER_MOVE_SPEED * (PLAYER_SPRINT_MULT if sprinting else 1.0) * dt
@@ -119,6 +114,16 @@ def update_player(
     state.game_time += dt * 0.001
 
     return player_moved
+
+
+def open_door(state: GameState, sfx: Sfx) -> None:
+    """Open the targeted door; a closing door reverses from its current position."""
+    door_pos = state.targeted_door()
+    if door_pos is None:
+        return
+    anim = state.door_anim.setdefault(door_pos, DoorAnim(phase="opening", progress=0.0, timer=0))
+    anim["phase"] = "opening"
+    sfx["door_open"].play()
 
 
 def update_doors(state: GameState, dt: int, sfx: Sfx) -> None:

@@ -6,15 +6,17 @@ import pygame
 
 from shooter.combat import fire_weapon
 from shooter.constants import MAX_AMMO, MOUSE_SENSITIVITY, WEAPONS, Weapon
+from shooter.simulation import open_door
 from shooter.state import GameState, reset_game
-from shooter.types import DoorAnim, Sfx
+from shooter.types import Sfx
 
+# Scancodes, like movement, so the number row works on every keyboard layout.
 _WEAPON_KEYS = {
-    pygame.K_1: Weapon.PISTOL,
-    pygame.K_2: Weapon.SHOTGUN,
-    pygame.K_3: Weapon.GATLING,
-    pygame.K_4: Weapon.ROCKETS,
-    pygame.K_0: Weapon.NUKE,
+    pygame.KSCAN_1: Weapon.PISTOL,
+    pygame.KSCAN_2: Weapon.SHOTGUN,
+    pygame.KSCAN_3: Weapon.GATLING,
+    pygame.KSCAN_4: Weapon.ROCKETS,
+    pygame.KSCAN_0: Weapon.NUKE,
 }
 _CHEAT_BUFFER_SIZE = 5
 
@@ -47,19 +49,12 @@ def handle_events(state: GameState, sfx: Sfx, pressed_scancodes: set[int]) -> bo
                 continue
             if not state.game_over and state.hp > 0:
                 _handle_cheat_key(state, event.key, sfx)
-            if event.key in _WEAPON_KEYS and not state.game_over:
-                new_weapon = _WEAPON_KEYS[event.key]
+            if event.scancode in _WEAPON_KEYS and not state.game_over:
+                new_weapon = _WEAPON_KEYS[event.scancode]
                 if state.owned[new_weapon]:
                     state.switch_weapon(new_weapon)
             if event.scancode == pygame.KSCAN_E and not state.game_over:
-                door_pos = state.world.find_door_in_front(state.px, state.py, state.pa)
-                if door_pos and door_pos not in state.door_anim:
-                    state.door_anim[door_pos] = DoorAnim(
-                        phase="opening",
-                        progress=0.0,
-                        timer=0,
-                    )
-                    sfx["door_open"].play()
+                open_door(state, sfx)
         elif event.type == pygame.KEYUP:
             pressed_scancodes.discard(event.scancode)
         elif event.type == pygame.WINDOWFOCUSLOST:

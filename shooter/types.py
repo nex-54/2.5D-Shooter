@@ -65,7 +65,8 @@ DoorPhase = Literal["opening", "open", "closing"]
 class DoorAnim(TypedDict):
     """Animation state for a single door tile.
 
-    phase:    current stage in the open -> open -> close cycle.
+    phase:    current stage in the opening -> open -> closing cycle. Reopening
+              a closing door returns it to 'opening' at its current progress.
     progress: 0.0 = fully closed, 1.0 = fully open (door slid into the ceiling).
               Advances during 'opening', holds at 1.0 during 'open', retracts
               during 'closing'.

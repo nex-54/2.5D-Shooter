@@ -168,6 +168,16 @@ class GameState:
         self.weapon = weapon
         self.shooting = False
 
+    def targeted_door(self) -> tuple[int, int] | None:
+        """The door E would open: first solid tile ahead, closed or still closing."""
+        door_pos = self.world.find_door_in_front(self.px, self.py, self.pa)
+        if door_pos is None:
+            return None
+        anim = self.door_anim.get(door_pos)
+        if anim is not None and anim["phase"] != "closing":
+            return None
+        return door_pos
+
     @property
     def exit_open(self) -> bool:
         """The exit unlocks once the level boss is dead."""

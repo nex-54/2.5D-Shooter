@@ -48,22 +48,33 @@ def hitscan(
     for e in enemies:
         if not e.alive:
             continue
-        edx = e.x - px
-        edy = e.y - py
-        along = edx * cos_a + edy * sin_a
-        across = abs(edy * cos_a - edx * sin_a)
-        if across >= e.hit_radius:
-            continue
-        half_chord = math.sqrt(e.hit_radius**2 - across**2)
-        if along + half_chord <= 0:
-            continue  # behind the shooter
-        dist = max(0.0, along - half_chord)
-        if dist < best_dist and world.has_line_of_sight(
-            px, py, px + cos_a * dist, py + sin_a * dist
+        dist = ray_circle_entry(px, py, cos_a, sin_a, e.x, e.y, e.hit_radius)
+        if (
+            dist is not None
+            and dist < best_dist
+            and world.has_line_of_sight(px, py, px + cos_a * dist, py + sin_a * dist)
         ):
             best_enemy = e
             best_dist = dist
     return best_enemy
+
+
+def ray_circle_entry(
+    ox: float, oy: float, cos_a: float, sin_a: float, cx: float, cy: float, radius: float
+) -> float | None:
+    """Distance along a unit ray to where it enters a circle; 0 if it starts inside.
+
+    None when the ray misses, or when the circle lies entirely behind the origin.
+    """
+    dx, dy = cx - ox, cy - oy
+    along = dx * cos_a + dy * sin_a
+    across = abs(dy * cos_a - dx * sin_a)
+    if across >= radius:
+        return None
+    half_chord = math.sqrt(radius**2 - across**2)
+    if along + half_chord <= 0:
+        return None
+    return max(0.0, along - half_chord)
 
 
 def apply_hit(enemy: Enemy, sfx: Sfx, damage: int = 1) -> bool:
@@ -97,7 +108,8 @@ class Enemy:
     attack_sound: SoundName = "enemy_attack"
     death_sound: SoundName = "enemy_die"
     # Half the drawn body width (torso to arms) in world units, for hitscan.
-    # Keep in step with sprite_scale, the drawn height relative to a wall.
+    # Keep in step with sprite_scale, the drawn height relative to a wall. Sprites
+    # stand on the floor and heads rise ~11% above it, so 0.9 reaches the ceiling.
     hit_radius = 0.25
     sprite_scale = 0.8
     # Humanoid sprite colors; spiders are drawn with their own palette.
@@ -218,8 +230,8 @@ class Boss(Enemy):
     anim_speed = 0.006
     attack_sound = "boss_roar"
     death_sound = "boss_die"
-    hit_radius = 0.38
-    sprite_scale = 1.2
+    hit_radius = 0.3
+    sprite_scale = 0.9
     body_color = (100, 30, 140)
     arm_color = (80, 25, 120)
     minimap_color = (180, 40, 180)

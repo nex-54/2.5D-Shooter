@@ -72,6 +72,14 @@ class WeaponRulesTests(unittest.TestCase):
         self.fire()
         self.assertEqual(self.state.ammo[0], 8)
 
+    def test_number_row_switches_weapons_on_any_keyboard_layout(self) -> None:
+        # On AZERTY the unshifted "2" key reports "é" instead of K_2.
+        self.state.owned[Weapon.SHOTGUN] = True
+        switch = pygame.event.Event(pygame.KEYDOWN, key=ord("é"), scancode=pygame.KSCAN_2)
+        with patch("shooter.input.pygame.event.get", return_value=[switch]):
+            handle_events(self.state, self.sounds.sfx, set())
+        self.assertEqual(self.state.weapon, Weapon.SHOTGUN)
+
     def test_switching_away_and_back_cannot_bypass_any_weapon_cooldown(self) -> None:
         for weapon_id, weapon in zip(Weapon, WEAPONS, strict=True):
             with self.subTest(weapon=weapon.name):

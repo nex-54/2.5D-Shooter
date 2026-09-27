@@ -82,10 +82,19 @@ def _project(
 
 
 def _eye_row(depth: float, eye_height: float) -> int:
-    """Screen row of standing eye height, where sprites are anchored, at a depth.
+    """Screen row of standing eye height, where floating sprites are anchored, at a depth.
 
     Raising the eye lowers nearby objects more than distant ones."""
     return HEIGHT // 2 + int((eye_height - EYE_HEIGHT) * HEIGHT / depth)
+
+
+def _floor_row(depth: float, eye_height: float) -> int:
+    """Screen row where the floor meets a sprite standing at a depth."""
+    return HEIGHT // 2 + int(eye_height * HEIGHT / depth)
+
+
+def _depth_shade(depth: float, darkest: float) -> float:
+    return max(darkest, min(1.0, 1.0 - (depth - 1) / MAX_DEPTH))
 
 
 def _shade(color: tuple[int, int, int], shade: float, boost: float = 1.0) -> tuple[int, int, int]:
@@ -145,7 +154,8 @@ def draw_enemy(screen: pygame.Surface, enemy: Enemy, camera: Camera, z_buffer: D
     corrected, screen_x = view
     sprite_h = min(int(HEIGHT / corrected * enemy.sprite_scale), HEIGHT * 2)
     sprite_w = max(sprite_h // 2, 4)
-    screen_y = _eye_row(corrected, camera.eye_height) - sprite_h // 2
+    # Sprites span sprite_h above their feet, which rest on the floor.
+    screen_y = _floor_row(corrected, camera.eye_height) - sprite_h
     # Include arms, horns, legs and health bars in the clipping bounds.
     half_w = int(sprite_w * 1.2) + 4
     top_ext = sprite_h // 2 + 4
@@ -156,7 +166,7 @@ def draw_enemy(screen: pygame.Surface, enemy: Enemy, camera: Camera, z_buffer: D
             return
         target, origin_x, origin_y = layer
         hit = enemy.damage_timer > 0
-        shade = max(0.3, min(1.0, 1.0 - (corrected - 1) / MAX_DEPTH))
+        shade = _depth_shade(corrected, 0.3)
         anim = enemy.anim_time
         if enemy.moving:
             walk_cycle = math.sin(anim * 6)
@@ -209,16 +219,14 @@ def _draw_spider(
     anim: float,
     attack_phase: float,
 ) -> None:
-    """Draw a spider enemy sprite."""
-    sp_y = screen_y + sprite_h // 3
-
+    """Draw a spider enemy sprite, its abdomen resting on the bottom of the sprite box."""
     body = _shade(WHITE if hit else (70, 40, 20), shade)
     highlight = _shade(WHITE if hit else (100, 60, 30), shade, 1.3)
 
     abd_rx = max(sprite_w * 2 // 5, 3)
     abd_ry = max(sprite_h // 5, 3)
     abd_cx = screen_x
-    abd_cy = sp_y + sprite_h // 3
+    abd_cy = screen_y + sprite_h - abd_ry
     pygame.draw.ellipse(screen, body, (abd_cx - abd_rx, abd_cy - abd_ry, abd_rx * 2, abd_ry * 2))
     if abd_rx > 4:
         pygame.draw.ellipse(
@@ -243,7 +251,7 @@ def _draw_spider(
 
     ceph_r = max(sprite_w // 4, 3)
     ceph_cx = screen_x
-    ceph_cy = sp_y + sprite_h // 6
+    ceph_cy = abd_cy - sprite_h // 6
     pygame.draw.circle(screen, body, (ceph_cx, ceph_cy), ceph_r)
     if ceph_r > 4:
         pygame.draw.circle(
@@ -434,7 +442,6 @@ def _draw_humanoid(
         hl_y = head_cy - head_r // 4
         hl_color = (min(255, skin_r + 40), min(255, skin_g + 40), min(255, skin_b + 40))
         pygame.draw.circle(screen, hl_color, (hl_x, hl_y), hl_r)
-    if head_r > 6:
         sh_r = head_r // 3
         sh_x = screen_x + head_r // 4
         sh_y = head_cy + head_r // 4
@@ -565,7 +572,7 @@ def draw_health_pack(
     bob = int(math.sin(pack.anim_time) * size * 0.15)
     cy = _eye_row(corrected, camera.eye_height) + bob
 
-    shade = max(0.4, min(1.0, 1.0 - (corrected - 1) / MAX_DEPTH))
+    shade = _depth_shade(corrected, 0.4)
 
     bounds = pygame.Rect(screen_x - size // 2, cy - size // 2, size, size)
     with z_buffer.sprite(screen, bounds, corrected) as layer:
@@ -612,7 +619,7 @@ def draw_weapon_pickup(
     size = max(int(HEIGHT / corrected * 0.42), 14)
     bob = int(math.sin(pack.anim_time * 1.5) * size * 0.1)
     cy = _eye_row(corrected, camera.eye_height) + bob
-    shade = max(0.4, min(1.0, 1.0 - (corrected - 1) / MAX_DEPTH))
+    shade = _depth_shade(corrected, 0.4)
 
     base = WEAPONS[pack.weapon_type].color
     pulse = abs(math.sin(pack.anim_time * 2))

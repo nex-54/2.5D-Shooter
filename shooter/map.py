@@ -291,8 +291,6 @@ def generate_level(level: int, rng: random.Random) -> LevelState:
     grid = [[WALL_TILE] * MAP_W for _ in range(MAP_H)]
     _carve_maze(rng, grid)
     _open_extra_walls(rng, grid, 20 + min(level, 5))
-    start_c, start_r = START_TILE
-    grid[start_r][start_c] = FLOOR_TILE
 
     ex, ey = _place_exit(rng, grid)
     doors = _place_doors(rng, grid, rng.randint(3, 5))

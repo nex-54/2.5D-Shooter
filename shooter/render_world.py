@@ -217,6 +217,9 @@ def _draw_fc_numpy(
     _fc_renderer.draw(world, screen, px, py, pa, eye_height)
 
 
+_TEXTURE_NAMES = {EXIT_TILE: "exit", BARRIER_TILE: "barrier", DOOR_TILE: "door"}
+
+
 def _draw_wall_slice(
     screen: pygame.Surface,
     x: int,
@@ -234,15 +237,7 @@ def _draw_wall_slice(
         if anim is not None:
             door_progress = anim["progress"]
 
-    if hit_tile == EXIT_TILE:
-        name = "exit"
-    elif hit_tile == BARRIER_TILE:
-        name = "barrier"
-    elif hit_tile == DOOR_TILE:
-        name = "door"
-    else:
-        name = "wall"
-    cols = tex.columns[name] if tex else None
+    cols = tex.columns[_TEXTURE_NAMES.get(hit_tile, "wall")] if tex is not None else None
 
     shade = max(30, 255 - int(depth * 18))
     if side == 1:

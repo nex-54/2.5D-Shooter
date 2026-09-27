@@ -9,8 +9,9 @@ from unittest.mock import MagicMock, patch
 import pygame
 
 from shooter import map as gmap
-from shooter.constants import GRAVITY, JUMP_VELOCITY, PLAYER_MARGIN
+from shooter.constants import DOOR_ANIM_DURATION, GRAVITY, JUMP_VELOCITY, PLAYER_MARGIN
 from shooter.entities import Boss
+from shooter.input import handle_events
 from shooter.simulation import update_doors, update_player
 from shooter.state import GameState, check_win_lose
 from shooter.types import DoorAnim
@@ -137,6 +138,32 @@ class PlayerCollisionTests(unittest.TestCase):
                 self.assertEqual(
                     self.state.door_anim[(5, 5)]["phase"], "closing" if closes else "open"
                 )
+
+    def test_e_reverses_a_closing_door_from_its_current_position(self) -> None:
+        self.world.maze[5][5] = gmap.DOOR_TILE
+        self.state.px, self.state.py, self.state.pa = 3.5, 5.5, 0.0
+        self.state.door_anim = {(5, 5): DoorAnim(phase="closing", progress=0.6, timer=0)}
+        # The prompt and the key share this rule, so a closing door offers E again.
+        self.assertEqual(self.state.targeted_door(), (5, 5))
+        press_e = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_e, scancode=pygame.KSCAN_E)
+        with patch("shooter.input.pygame.event.get", return_value=[press_e]):
+            handle_events(self.state, self.sfx, set())
+        self.assertEqual(self.state.door_anim[(5, 5)]["phase"], "opening")
+        self.assertEqual(self.state.door_anim[(5, 5)]["progress"], 0.6)
+        self.assertIsNone(self.state.targeted_door())
+        update_doors(self.state, DOOR_ANIM_DURATION // 2, self.sfx)
+        self.assertEqual(self.world.tile_at(5.5, 5.5), gmap.FLOOR_TILE)
+
+    def test_opposing_movement_keys_cancel_out(self) -> None:
+        for keys, pressed in (
+            (Keys(), {pygame.KSCAN_W, pygame.KSCAN_S}),
+            (Keys(), {pygame.KSCAN_A, pygame.KSCAN_D}),
+            (Keys(pygame.K_DOWN), {pygame.KSCAN_W}),
+        ):
+            with self.subTest(pressed=pressed):
+                self.state.px, self.state.py = 5.5, 5.5
+                self.assertFalse(update_player(self.state, 16, keys, pressed, self.sfx))
+                self.assertEqual((self.state.px, self.state.py), (5.5, 5.5))
 
 
 if __name__ == "__main__":

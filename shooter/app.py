@@ -19,9 +19,11 @@ def main() -> None:
     """Initialize resources, run the game, and release Pygame on every exit path."""
     try:
         # pre_init must run before pygame.init() or the mixer latches onto defaults.
-        pygame.mixer.pre_init(SAMPLE_RATE, -16, 1, 512)
+        # Sounds are raw 16-bit mono buffers at SAMPLE_RATE. Forbid format changes so
+        # SDL converts for the device instead of replaying them at the wrong speed.
+        pygame.mixer.pre_init(SAMPLE_RATE, -16, 1, 512, allowedchanges=0)
         pygame.init()
-        pygame.mixer.init(SAMPLE_RATE, -16, 1, 512)
+        pygame.mixer.init(SAMPLE_RATE, -16, 1, 512, allowedchanges=0)
         pygame.mixer.set_num_channels(16)
         pygame.display.set_icon(generate_icon())
         screen = pygame.display.set_mode((WIDTH, HEIGHT))

@@ -28,6 +28,12 @@ from shooter.constants import (
 from shooter.entities import Boss, Enemy, HealthPack, Rocket, WeaponPickup
 from shooter.map import BARRIER_TILE, DOOR_TILE, MAP_H, MAP_W, START_TILE, WALL_TILE, LevelState
 
+_MINIMAP_TILE_COLORS = {
+    WALL_TILE: GRAY,
+    BARRIER_TILE: (180, 140, 60),
+    DOOR_TILE: (140, 80, 40),
+}
+
 
 def draw_minimap(
     world: LevelState,
@@ -50,24 +56,13 @@ def draw_minimap(
     bg_surf.fill((0, 0, 0, 160))
     screen.blit(bg_surf, (mx, my))
 
-    for r in range(MAP_H):
-        for c in range(MAP_W):
-            if world.maze[r][c] == WALL_TILE:
+    for r, row in enumerate(world.maze):
+        for c, tile in enumerate(row):
+            color = _MINIMAP_TILE_COLORS.get(tile)
+            if color is not None:
                 pygame.draw.rect(
                     screen,
-                    GRAY,
-                    (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE),
-                )
-            elif world.maze[r][c] == BARRIER_TILE:
-                pygame.draw.rect(
-                    screen,
-                    (180, 140, 60),
-                    (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE),
-                )
-            elif world.maze[r][c] == DOOR_TILE:
-                pygame.draw.rect(
-                    screen,
-                    (140, 80, 40),
+                    color,
                     (mx + c * MINIMAP_SCALE, my + r * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE),
                 )
 

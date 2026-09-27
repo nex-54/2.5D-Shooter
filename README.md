@@ -19,7 +19,7 @@ A retro first-person shooter built in Python with Pygame CE, using a from-scratc
 - **Raycasting 3D engine** — textured walls, floors, and ceilings rendered one column at a time
 - **Procedural everything** — all wall textures, sprites, and sound effects synthesized in code at startup
 - **5 weapons** — pistol, shotgun, gatling gun, rocket launcher, and a screen-clearing nuke
-- **4 enemy types** — regular grunts, fast scouts, ceiling spiders, and a level-end boss
+- **4 enemy types** — regular grunts, fast scouts, low-crawling spiders, and a level-end boss
 - **Procedural level generation** — each level rewrites the maze, doors, and spawn points
 - **Doors, jumping, sprinting, strafing**, and a live minimap
 - **Fully typed** — passes `pyright` in strict mode

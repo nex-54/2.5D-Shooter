@@ -21,7 +21,7 @@ from shooter.constants import (
     WEAPONS,
     Weapon,
 )
-from shooter.entities import Boss, Enemy, Rocket, apply_hit, hitscan
+from shooter.entities import Boss, Enemy, Rocket, apply_hit, hitscan, ray_circle_entry
 from shooter.state import GameState
 from shooter.types import Sfx
 
@@ -196,15 +196,11 @@ def _move_rocket(state: GameState, rocket: Rocket, distance: float, sfx: Sfx) ->
     for enemy in state.enemies:
         if not enemy.alive:
             continue
-        dx, dy = enemy.x - rocket.x, enemy.y - rocket.y
-        along = dx * cos_a + dy * sin_a
-        across = abs(dy * cos_a - dx * sin_a)
-        if across >= ROCKET_HIT_RADIUS:
+        contact = ray_circle_entry(
+            rocket.x, rocket.y, cos_a, sin_a, enemy.x, enemy.y, ROCKET_HIT_RADIUS
+        )
+        if contact is None:
             continue
-        half_chord = math.sqrt(ROCKET_HIT_RADIUS**2 - across**2)
-        if along + half_chord < 0:
-            continue
-        contact = max(0.0, along - half_chord)
         if contact < hit_distance or (contact == hit_distance and not hit_wall):
             hit_distance = contact
             hit_wall = False

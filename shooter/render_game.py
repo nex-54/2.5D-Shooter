@@ -37,7 +37,8 @@ def draw_game_over(
     msg, _ = big_font.render("GAME OVER", RED)
     screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, HEIGHT // 2 - 40))
     sub, _ = font.render(
-        f"Reached Level {state.level}  -  Kills: {state.kills}/{state.total_enemies}  -  Press R to restart  -  ESC to quit",
+        f"Reached Level {state.level}  -  Kills: {state.kills}/{state.total_enemies}"
+        "  -  Press R to restart  -  ESC to quit",
         WHITE,
     )
     screen.blit(sub, (WIDTH // 2 - sub.get_width() // 2, HEIGHT // 2 + 30))
@@ -133,7 +134,6 @@ def draw_frame(
         god_mode=state.god_mode,
     )
 
-    door_pos = state.world.find_door_in_front(state.px, state.py, state.pa)
-    if door_pos is not None and door_pos not in state.door_anim:
+    if state.targeted_door() is not None:
         prompt_surf, prompt_rect = font.render("Press [E] to open", YELLOW, size=20)
         screen.blit(prompt_surf, (WIDTH // 2 - prompt_rect.width // 2, HEIGHT // 2 + 60))

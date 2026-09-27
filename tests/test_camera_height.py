@@ -10,8 +10,10 @@ import pygame
 
 from shooter import map as gmap
 from shooter.constants import EYE_HEIGHT, HEIGHT, PLAYER_MARGIN, TEX_SIZE, WIDTH
+from shooter.entities import Boss, Enemy, Scout, Spider
 from shooter.occlusion import DepthBuffer
 from shooter.raycaster import cast_rays
+from shooter.render_sprites import Camera, draw_enemy
 from shooter.render_world import draw_3d, draw_floor_ceiling
 from shooter.types import Textures
 from tests.support import open_world
@@ -93,6 +95,28 @@ class CameraHeightTests(unittest.TestCase):
         self.assertTrue((pixels[..., 0] > 0).all())
         self.assertTrue((pixels[..., 1:] == 0).all())
         self.assertLessEqual(max(height for _, height in sizes), 2 * HEIGHT)
+
+    def test_enemies_stand_on_the_floor_and_fit_under_the_ceiling(self) -> None:
+        # Sprites used to hang from eye height: small ones floated, the boss sank.
+        for enemy_type in (Enemy, Scout, Spider, Boss):
+            for depth, eye in ((2.0, EYE_HEIGHT), (4.0, EYE_HEIGHT), (3.0, JUMP_PEAK)):
+                with self.subTest(enemy=enemy_type.__name__, depth=depth, eye=eye):
+                    enemy = enemy_type(2.5 + depth, 5.5)
+                    enemy.anim_time = 0.0
+                    self.screen.fill((0, 0, 0))
+                    draw_enemy(self.screen, enemy, Camera(2.5, 5.5, 0.0, eye), DepthBuffer())
+                    pixels = pygame.surfarray.array3d(self.screen).any(axis=2)
+                    rows = np.flatnonzero(pixels.any(axis=0))
+                    scale = HEIGHT / depth
+                    self.assertAlmostEqual(rows[-1] + 1, HORIZON + eye * scale, delta=2)
+                    ceiling = HORIZON - (1 - eye) * scale
+                    if enemy_type is Boss:
+                        # The head reaches the ceiling; only the horns beside it rise past.
+                        head = np.flatnonzero(pixels[WIDTH // 2])
+                        self.assertGreaterEqual(head[0], ceiling - 1)
+                        self.assertLess(head[0], ceiling + 0.05 * scale)
+                    else:
+                        self.assertGreater(rows[0], ceiling)
 
 
 if __name__ == "__main__":

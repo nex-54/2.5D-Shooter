@@ -39,7 +39,7 @@ class HitscanTests(unittest.TestCase):
         self.assertIs(hitscan(self.world, [beside, target], 2.5, 5.5, math.atan2(0.4, 3.0)), beside)
 
     def test_bigger_bodies_are_easier_to_hit(self) -> None:
-        aim = math.asin(0.3 / 5.0)
+        aim = math.asin(0.25 / 5.0)
         self.assertIsNotNone(hitscan(self.world, [Boss(7.5, 5.5)], 2.5, 5.5, aim))
         self.assertIsNone(hitscan(self.world, [Scout(7.5, 5.5)], 2.5, 5.5, aim))
 
