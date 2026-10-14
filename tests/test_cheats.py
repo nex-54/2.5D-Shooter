@@ -11,7 +11,7 @@ from shooter.entities import Boss, Enemy, Rocket, Scout, Spider
 from shooter.input import handle_events
 from shooter.simulation import update_game
 from shooter.state import GameState, reset_game, start_level
-from tests.support import Keys, SoundMocks, open_world
+from tests.support import Keys, SoundMocks
 
 
 def send(
@@ -87,7 +87,6 @@ def test_idkfa_unlocks_and_refills_every_weapon_without_switching_or_resetting_c
 def test_cheats_are_disabled_while_paused_dead_or_game_over(
     status: str, pressed: set[int], sounds: SoundMocks, state: GameState
 ) -> None:
-    state.reset()
     if status == "dead":
         state.hp = 0
     else:
@@ -116,7 +115,6 @@ def test_pausing_or_losing_focus_discards_a_partial_code(
     assert not state.god_mode
     type_code(pressed, sounds, state, "iddqd")
     assert state.god_mode
-    state.reset()
 
 
 @pytest.mark.parametrize(
@@ -125,8 +123,6 @@ def test_pausing_or_losing_focus_discards_a_partial_code(
 def test_god_mode_blocks_every_enemy_type_and_damage_resumes_when_disabled(
     enemy_type: type[Enemy], pressed: set[int], sounds: SoundMocks, state: GameState
 ) -> None:
-    state.reset()
-    state.world = open_world()
     state.hp = 1
     enemy = enemy_type(state.px + 0.5, state.py)
     state.enemies = [enemy]

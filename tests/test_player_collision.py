@@ -9,14 +9,21 @@ import pygame
 import pytest
 
 from shooter import map as gmap
-from shooter.constants import DOOR_ANIM_DURATION, GRAVITY, JUMP_VELOCITY, PLAYER_MARGIN
-from shooter.entities import Boss
+from shooter.constants import (
+    DOOR_ANIM_DURATION,
+    DOOR_RETRY_DELAY,
+    GRAVITY,
+    JUMP_VELOCITY,
+    PLAYER_MARGIN,
+    PLAYER_MOVE_SPEED,
+)
+from shooter.entities import Boss, Enemy
 from shooter.input import handle_events
 from shooter.map import LevelState
-from shooter.simulation import update_doors, update_player
+from shooter.simulation import update_doors, update_game, update_player
 from shooter.state import GameState, check_win_lose
 from shooter.types import DoorAnim, Sfx
-from tests.support import Keys
+from tests.support import Keys, SoundMocks
 
 
 def distance_to_tile(x: float, y: float, col: int, row: int) -> float:
@@ -34,6 +41,49 @@ def walk(
     return path
 
 
+@pytest.mark.parametrize(
+    "key_code, scancode, dx, dy",
+    (
+        (pygame.K_w, pygame.KSCAN_W, 1, 0),
+        (pygame.K_s, pygame.KSCAN_S, -1, 0),
+        (pygame.K_a, pygame.KSCAN_A, 0, -1),
+        (pygame.K_d, pygame.KSCAN_D, 0, 1),
+        (pygame.K_z, pygame.KSCAN_W, 1, 0),
+        (pygame.K_q, pygame.KSCAN_A, 0, -1),
+    ),
+    ids=("forward", "back", "left", "right", "azerty-forward", "azerty-left"),
+)
+def test_movement_key_events_start_hold_and_stop_motion(
+    key_code: int,
+    scancode: int,
+    dx: int,
+    dy: int,
+    pressed: set[int],
+    sfx: Sfx,
+    state: GameState,
+) -> None:
+    state.px, state.py = 5.5, 5.5
+    press = pygame.event.Event(pygame.KEYDOWN, key=key_code, scancode=scancode)
+    with patch("shooter.input.pygame.event.get", return_value=[press]):
+        assert handle_events(state, sfx, pressed)
+    assert scancode in pressed
+
+    for frame in (1, 2):
+        assert update_game(state, 16, Keys(), pressed, sfx)
+        distance = PLAYER_MOVE_SPEED * 16 * frame
+        assert (state.px, state.py) == pytest.approx(
+            (5.5 + dx * distance, 5.5 + dy * distance), rel=0, abs=1e-9
+        )
+
+    release = pygame.event.Event(pygame.KEYUP, key=key_code, scancode=scancode)
+    with patch("shooter.input.pygame.event.get", return_value=[release]):
+        assert handle_events(state, sfx, pressed)
+    assert scancode not in pressed
+    stopped = state.px, state.py
+    assert not update_game(state, 16, Keys(), pressed, sfx)
+    assert (state.px, state.py) == stopped
+
+
 def test_exit_stays_shut_until_the_boss_dies(sfx: Sfx, state: GameState, world: LevelState) -> None:
     exit_x = gmap.MAP_W - 1
     world.maze[5][exit_x] = gmap.EXIT_TILE
@@ -41,7 +91,7 @@ def test_exit_stays_shut_until_the_boss_dies(sfx: Sfx, state: GameState, world: 
     state.boss = Boss(10.5, 10.5)
     state.px, state.py, state.pa = exit_x - 2.5, 5.5, 0.0
     walk(sfx, state, 60)
-    assert round(abs(state.px - (exit_x - PLAYER_MARGIN)), 5) == 0
+    assert state.px == pytest.approx(exit_x - PLAYER_MARGIN, rel=0, abs=5e-6)
     with patch("shooter.state.start_level") as start_level:
         check_win_lose(state)
         start_level.assert_not_called()
@@ -76,8 +126,6 @@ def test_footprint_keeps_its_margin_from_corners_and_glancing_walls(
     path = walk(sfx, state, 200)
     closest = min(distance_to_tile(x, y, col, row) for x, y in path for col, row in wall_tiles)
     assert closest >= PLAYER_MARGIN - 1e-05
-    for col, row in wall_tiles:
-        world.maze[row][col] = 0
 
 
 @pytest.mark.parametrize("dt", (16, 50))
@@ -87,7 +135,7 @@ def test_walls_stop_the_player_flush_at_any_frame_rate(
     world.maze[5][5] = 1
     state.px, state.py, state.pa = 2.5, 5.5, 0.0
     walk(sfx, state, 100, dt=dt)
-    assert round(abs(state.px - (5 - PLAYER_MARGIN)), 5) == 0
+    assert state.px == pytest.approx(5 - PLAYER_MARGIN, rel=0, abs=5e-6)
 
 
 def test_barriers_block_on_foot_but_can_be_jumped(
@@ -96,7 +144,7 @@ def test_barriers_block_on_foot_but_can_be_jumped(
     world.maze[5][5] = gmap.BARRIER_TILE
     state.px, state.py, state.pa = 2.5, 5.5, 0.0
     walk(sfx, state, 100)
-    assert round(abs(state.px - (5 - PLAYER_MARGIN)), 5) == 0
+    assert state.px == pytest.approx(5 - PLAYER_MARGIN, rel=0, abs=5e-6)
 
     walk(sfx, state, 100, Keys(pygame.K_SPACE))
     assert state.px > 6 + PLAYER_MARGIN
@@ -122,19 +170,18 @@ def test_jump_clears_barriers_but_stays_below_the_ceiling(sfx: Sfx, state: GameS
 def test_jump_trajectory_is_independent_of_frame_intervals(
     schedule: tuple[int, ...], sfx: Sfx, state: GameState
 ) -> None:
-    state.spawn_player()
     elapsed = 0
     for index, dt in enumerate(schedule):
         keys = Keys(pygame.K_SPACE) if index == 0 else Keys()
         update_player(state, dt, keys, set(), sfx)
         elapsed += dt
         expected = JUMP_VELOCITY * elapsed - 0.5 * GRAVITY * elapsed**2
-        assert round(abs(state.jump_height - expected), 7) == 0
+        assert state.jump_height == pytest.approx(expected, rel=0, abs=5e-8)
         assert not state.on_ground
-    assert round(abs(state.jump_height - 0.405), 7) == 0
+    assert state.jump_height == pytest.approx(0.405, rel=0, abs=5e-8)
     for dt in schedule:
         update_player(state, dt, Keys(), set(), sfx)
-    assert round(abs(state.jump_height - 0), 10) == 0
+    assert state.jump_height == pytest.approx(0, rel=0, abs=5e-11)
     # Step past landing to avoid relying on floating-point equality at t=600.
     update_player(state, 1, Keys(), set(), sfx)
     assert state.on_ground
@@ -156,6 +203,39 @@ def test_doors_stay_open_while_the_footprint_overlaps_them(
     update_doors(state, 16, sfx)
     assert (world.tile_at(5.5, 5.5) == gmap.DOOR_TILE) == closes
     assert state.door_anim[5, 5]["phase"] == ("closing" if closes else "open")
+
+
+@pytest.mark.parametrize("leaves", (True, False), ids=("enemy-leaves", "enemy-dies"))
+def test_doors_retry_until_a_living_enemy_leaves_or_dies(
+    leaves: bool, sounds: SoundMocks, state: GameState, world: LevelState
+) -> None:
+    enemy = Enemy(5.5, 5.5)
+    state.enemies = [enemy]
+    state.door_anim = {(5, 5): DoorAnim(phase="open", progress=1.0, timer=0)}
+
+    update_doors(state, 16, sounds.sfx)
+    assert world.tile_at(5.5, 5.5) == gmap.FLOOR_TILE
+    assert state.door_anim[5, 5]["phase"] == "open"
+    assert state.door_anim[5, 5]["timer"] == DOOR_RETRY_DELAY
+    sounds["door_close"].play.assert_not_called()
+
+    if leaves:
+        enemy.x = 6.5
+    else:
+        enemy.take_damage(enemy.hp)
+    update_doors(state, DOOR_RETRY_DELAY - 1, sounds.sfx)
+    assert world.tile_at(5.5, 5.5) == gmap.FLOOR_TILE
+    assert state.door_anim[5, 5]["phase"] == "open"
+    sounds["door_close"].play.assert_not_called()
+
+    update_doors(state, 1, sounds.sfx)
+    assert world.tile_at(5.5, 5.5) == gmap.DOOR_TILE
+    assert state.door_anim[5, 5]["phase"] == "closing"
+    sounds["door_close"].play.assert_called_once()
+    update_doors(state, DOOR_ANIM_DURATION, sounds.sfx)
+    assert (5, 5) not in state.door_anim
+    assert world.tile_at(5.5, 5.5) == gmap.DOOR_TILE
+    sounds["door_close"].play.assert_called_once()
 
 
 def test_e_reverses_a_closing_door_from_its_current_position(

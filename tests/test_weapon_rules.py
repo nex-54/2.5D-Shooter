@@ -6,13 +6,13 @@ import pygame
 import pytest
 
 from shooter.combat import update_combat
-from shooter.constants import EMPTY_CLICK_DELAY, MAX_AMMO, WEAPONS, Weapon
-from shooter.entities import Boss, Enemy, WeaponPickup
+from shooter.constants import EMPTY_CLICK_DELAY, MAX_AMMO, PISTOL_DAMAGE, WEAPONS, Weapon
+from shooter.entities import PICKUP_WEAPONS, Boss, Enemy, WeaponPickup
 from shooter.input import handle_events
 from shooter.map import LevelState
 from shooter.simulation import update_pickups
 from shooter.state import GameState
-from tests.support import SoundMocks, open_world
+from tests.support import SoundMocks
 
 
 @pytest.fixture
@@ -74,6 +74,33 @@ def test_unowned_and_empty_weapons_cannot_deal_damage(
     assert state.rockets == []
 
 
+def test_pistol_deals_damage_and_counts_a_kill_once(sounds: SoundMocks, state: GameState) -> None:
+    target = Enemy(state.px + 1, state.py)
+    state.enemies = [target]
+    fire(sounds, state)
+    assert target.hp == target.max_hp - PISTOL_DAMAGE
+    assert target.alive
+    assert state.kills == 0
+    sounds["enemy_hurt"].play.assert_called_once()
+    sounds["enemy_die"].play.assert_not_called()
+
+    fire(sounds, state)
+    assert target.hp == target.max_hp - PISTOL_DAMAGE
+    sounds["enemy_hurt"].play.assert_called_once()
+
+    update_combat(state, WEAPONS[Weapon.PISTOL].fire_interval_ms, sounds.sfx)
+    fire(sounds, state)
+    assert target.hp == 0
+    assert not target.alive
+    assert state.kills == 1
+    sounds["enemy_die"].play.assert_called_once()
+
+    update_combat(state, WEAPONS[Weapon.PISTOL].fire_interval_ms, sounds.sfx)
+    fire(sounds, state)
+    assert state.kills == 1
+    sounds["enemy_die"].play.assert_called_once()
+
+
 def test_pistol_and_gatling_share_ammo_when_switching(sounds: SoundMocks, state: GameState) -> None:
     state.ammo[0] = 10
     fire(sounds, state)
@@ -103,8 +130,6 @@ def test_switching_away_and_back_cannot_bypass_any_weapon_cooldown(
     weapon_id: Weapon, sounds: SoundMocks, state: GameState
 ) -> None:
     weapon = WEAPONS[weapon_id]
-    state.reset()
-    state.world = open_world()
     state.owned = [True] * len(WEAPONS)
     state.ammo = [10, 10, 10, 10]
     state.switch_weapon(weapon_id)
@@ -142,8 +167,6 @@ def test_empty_click_cooldown_survives_switching(sounds: SoundMocks, state: Game
 def test_gatling_fire_rate_is_independent_of_frame_intervals(
     schedule: tuple[int, ...], sounds: SoundMocks, state: GameState
 ) -> None:
-    state.reset()
-    state.world = open_world()
     state.owned[Weapon.GATLING] = True
     state.switch_weapon(Weapon.GATLING)
     state.ammo[0] = 999
@@ -163,9 +186,20 @@ def test_idle_gatling_does_not_accumulate_catch_up_shots(
     state.owned[Weapon.GATLING] = True
     state.switch_weapon(Weapon.GATLING)
     fire(sounds, state)
-    state.mouse_held = False
-    update_combat(state, 6000, sounds.sfx)
+    assert state.mouse_held
     ammo = state.ammo[0]
+    update_combat(state, WEAPONS[Weapon.GATLING].fire_interval_ms, sounds.sfx)
+    assert state.ammo[0] == ammo - 1
+    assert sounds["gatling"].play.call_count == 2
+
+    release = pygame.event.Event(pygame.MOUSEBUTTONUP, button=1)
+    with patch("shooter.input.pygame.event.get", return_value=[release]):
+        assert handle_events(state, sounds.sfx, set())
+    assert not state.mouse_held
+    ammo = state.ammo[0]
+    update_combat(state, 6000, sounds.sfx)
+    assert state.ammo[0] == ammo
+    assert sounds["gatling"].play.call_count == 2
     fire(sounds, state)
     assert state.ammo[0] == ammo - 1
     assert state.shoot_timer == WEAPONS[Weapon.GATLING].fire_interval_ms
@@ -193,6 +227,70 @@ def test_gatling_pickup_unlocks_weapon_and_caps_shared_ammo(
     assert state.weapon == Weapon.GATLING
     assert state.ammo[0] == MAX_AMMO[0]
     assert not pickup.active
+
+
+@pytest.mark.parametrize("ammo_level", ("empty", "partial", "near-cap"))
+@pytest.mark.parametrize(
+    "weapon_id", PICKUP_WEAPONS, ids=tuple(weapon.name.lower() for weapon in PICKUP_WEAPONS)
+)
+def test_owned_weapon_pickups_refill_only_their_ammo_pool(
+    ammo_level: str, weapon_id: Weapon, sounds: SoundMocks, state: GameState
+) -> None:
+    weapon = WEAPONS[weapon_id]
+    pool = weapon.ammo_pool
+    initial, expected = {
+        "empty": (0, weapon.pickup_ammo),
+        "partial": (1, 1 + weapon.pickup_ammo),
+        "near-cap": (MAX_AMMO[pool] - 1, MAX_AMMO[pool]),
+    }[ammo_level]
+    equipped = Weapon.SHOTGUN if weapon_id == Weapon.PISTOL else Weapon.PISTOL
+    state.weapon = equipped
+    state.owned[equipped] = True
+    state.owned[weapon_id] = True
+    owned = state.owned.copy()
+    state.ammo[pool] = initial
+    expected_ammo = state.ammo.copy()
+    expected_ammo[pool] = expected
+    pickup = WeaponPickup(state.px, state.py, weapon_id)
+    state.weapon_pickups = [pickup]
+
+    update_pickups(state, 16, sounds.sfx)
+
+    assert state.ammo == expected_ammo
+    assert state.owned == owned
+    assert state.weapon == equipped
+    assert not pickup.active
+    sounds["pickup"].play.assert_called_once()
+
+    update_pickups(state, 16, sounds.sfx)
+    assert state.ammo == expected_ammo
+    sounds["pickup"].play.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "weapon_id", PICKUP_WEAPONS, ids=tuple(weapon.name.lower() for weapon in PICKUP_WEAPONS)
+)
+def test_owned_weapon_pickups_remain_available_when_ammo_is_full(
+    weapon_id: Weapon, sounds: SoundMocks, state: GameState
+) -> None:
+    pool = WEAPONS[weapon_id].ammo_pool
+    equipped = Weapon.SHOTGUN if weapon_id == Weapon.PISTOL else Weapon.PISTOL
+    state.weapon = equipped
+    state.owned[equipped] = True
+    state.owned[weapon_id] = True
+    owned = state.owned.copy()
+    state.ammo[pool] = MAX_AMMO[pool]
+    ammo = state.ammo.copy()
+    pickup = WeaponPickup(state.px, state.py, weapon_id)
+    state.weapon_pickups = [pickup]
+
+    update_pickups(state, 16, sounds.sfx)
+
+    assert state.ammo == ammo
+    assert state.owned == owned
+    assert state.weapon == equipped
+    assert pickup.active
+    sounds["pickup"].play.assert_not_called()
 
 
 def test_shotgun_counts_a_kill_once_despite_multiple_pellets(

@@ -57,7 +57,7 @@ def test_wall_contact_is_independent_of_frame_size(dt: int, sfx: Sfx, state: Gam
         if rocket.exploded:
             break
     assert rocket.exploded
-    assert round(abs(rocket.x - 5.0), 5) == 0
+    assert rocket.x == pytest.approx(5.0, rel=0, abs=5e-6)
     assert rocket.x < 5.0
 
 
@@ -106,7 +106,7 @@ def test_enemy_contacts_are_swept_and_nearest_contact_wins(sfx: Sfx, state: Game
     state.rockets = [rocket]
     update_rockets(state, 1000, sfx)
     assert rocket.exploded
-    assert round(abs(rocket.x - 4.4), 7) == 0
+    assert rocket.x == pytest.approx(4.4, rel=0, abs=5e-8)
     assert not near.alive
     assert far.hp == far.max_hp
     assert state.kills == 1

@@ -1,4 +1,4 @@
-"""Verify hitscan hit zones match enemy bodies and gatling barrels spin down forward."""
+"""Verify hitscan, attack protection, damage accounting, and gatling spin."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from shooter.combat import update_combat
-from shooter.constants import Weapon
+from shooter.combat import update_combat, update_enemies
+from shooter.constants import DAMAGE_COOLDOWN_MS, PLAYER_MAX_HP, Weapon
 from shooter.entities import Boss, Enemy, Scout, Spider, apply_hit, hitscan
 from shooter.map import LevelState
 from shooter.state import GameState
@@ -62,6 +62,34 @@ def test_shots_hit_the_part_of_an_enemy_showing_past_a_corner(world: LevelState)
 
 def test_shots_do_not_hit_enemies_behind_the_shooter(world: LevelState) -> None:
     assert hitscan(world, [Enemy(1.5, 5.5)], 2.5, 5.5, 0.0) is None
+
+
+def test_damage_cooldown_blocks_other_attackers_until_it_expires(
+    sounds: SoundMocks, state: GameState
+) -> None:
+    first = Enemy(state.px + 0.5, state.py)
+    second = Enemy(state.px, state.py + 0.5)
+    state.enemies = [first, second]
+
+    update_enemies(state, 16, sounds.sfx)
+    assert state.hp == PLAYER_MAX_HP - first.damage
+    assert state.damage_cooldown == DAMAGE_COOLDOWN_MS
+    assert first.attack_cooldown == first.attack_cooldown_duration
+    assert second.attack_cooldown == 0
+    sounds["enemy_attack"].play.assert_called_once()
+
+    update_enemies(state, DAMAGE_COOLDOWN_MS - 1, sounds.sfx)
+    assert state.hp == PLAYER_MAX_HP - first.damage
+    assert state.damage_cooldown == 1
+    assert second.attack_cooldown == 0
+    sounds["enemy_attack"].play.assert_called_once()
+
+    update_enemies(state, 1, sounds.sfx)
+    assert state.hp == PLAYER_MAX_HP - first.damage - second.damage
+    assert state.damage_cooldown == DAMAGE_COOLDOWN_MS
+    assert first.attack_cooldown > 0
+    assert second.attack_cooldown == second.attack_cooldown_duration
+    assert sounds["enemy_attack"].play.call_count == 2
 
 
 def test_released_barrels_coast_forward_to_a_stop() -> None:

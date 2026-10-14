@@ -1,15 +1,22 @@
 """Generated levels own their data and preserve supplies as difficulty increases."""
 
 import random
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Iterator
 from unittest.mock import MagicMock
 
 import pytest
 
-from shooter.constants import SPAWN_HEALTH_PACK_COUNT, SPAWN_WEAPON_PICKUP_COUNT
-from shooter.entities import Boss
-from shooter.map import DOOR_TILE, MAP_H, MAP_W
+from shooter.constants import (
+    SPAWN_ENEMY_MIN_DIST,
+    SPAWN_HEALTH_PACK_COUNT,
+    SPAWN_REGULAR_COUNT,
+    SPAWN_SCOUT_COUNT,
+    SPAWN_SPIDER_COUNT,
+    SPAWN_WEAPON_PICKUP_COUNT,
+)
+from shooter.entities import PICKUP_WEAPONS, Boss, Enemy, Scout, Spider
+from shooter.map import DOOR_TILE, FLOOR_TILE, MAP_H, MAP_W, WALL_TILE
 from shooter.simulation import update_doors
 from shooter.state import GameState, start_level
 from shooter.textures import generate_textures
@@ -44,7 +51,7 @@ def test_seeded_levels_have_reachable_unique_spawns_and_reserved_supplies(
             if (
                 0 <= col < MAP_W
                 and 0 <= row < MAP_H
-                and world.maze[row][col] != 1
+                and world.maze[row][col] != WALL_TILE
                 and cell not in seen
             ):
                 seen.add(cell)
@@ -52,13 +59,39 @@ def test_seeded_levels_have_reachable_unique_spawns_and_reserved_supplies(
     entities = [*state.enemies, *state.health_packs, *state.weapon_pickups]
     positions = [(int(e.x), int(e.y)) for e in entities]
     assert len(positions) == len(set(positions))
-    assert all((world.maze[y][x] == 0 for x, y in positions))
+    assert all((world.maze[y][x] == FLOOR_TILE for x, y in positions))
     assert all((pos in seen for pos in positions))
     assert world.exit_pos in seen
     assert len(state.health_packs) == SPAWN_HEALTH_PACK_COUNT
     assert len(state.weapon_pickups) == SPAWN_WEAPON_PICKUP_COUNT
-    assert {p.weapon_type for p in state.weapon_pickups} == {0, 1, 2, 3}
-    assert sum((isinstance(e, Boss) for e in state.enemies)) == 1
+    assert {p.weapon_type for p in state.weapon_pickups} == set(PICKUP_WEAPONS)
+
+    requested_counts = {
+        Enemy: SPAWN_REGULAR_COUNT + level - 1,
+        Scout: SPAWN_SCOUT_COUNT + level - 1,
+        Spider: SPAWN_SPIDER_COUNT + level - 1,
+    }
+    counts = Counter(type(enemy) for enemy in state.enemies)
+    assert counts[Boss] == 1
+    assert counts.keys() <= requested_counts.keys() | {Boss}
+    assert state.total_enemies == len(state.enemies)
+
+    reserved = {(int(p.x), int(p.y)) for p in [*state.health_packs, *state.weapon_pickups]}
+    reserved.add((int(world.boss_spawn[0]), int(world.boss_spawn[1])))
+    capacity = sum(
+        tile == FLOOR_TILE
+        and abs(col - start[0]) + abs(row - start[1]) > SPAWN_ENEMY_MIN_DIST
+        and (col, row) not in reserved
+        for row, tiles in enumerate(world.maze)
+        for col, tile in enumerate(tiles)
+    )
+    requested_total = sum(requested_counts.values())
+    assert len(state.enemies) == 1 + min(requested_total, capacity)
+    for enemy_type, requested in requested_counts.items():
+        if capacity >= requested_total:
+            assert counts[enemy_type] == requested
+        else:
+            assert counts[enemy_type] <= requested
 
 
 @pytest.mark.usefixtures("preserve_random_state")
@@ -92,7 +125,7 @@ def test_loading_and_opening_doors_in_one_game_cannot_mutate_another() -> None:
     col, row = second.world.door_positions[0]
     second.door_anim[(col, row)] = DoorAnim(phase="opening", progress=0.9, timer=0)
     update_doors(second, 50, MagicMock())
-    assert second.world.tile_at(col, row) == 0
+    assert second.world.tile_at(col, row) == FLOOR_TILE
     assert first.world.tile_at(col, row) == DOOR_TILE
     start_level(second, 2)
     assert first.world.maze == original_maze

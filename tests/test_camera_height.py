@@ -60,7 +60,6 @@ def test_rising_eye_sinks_near_walls_more_than_far_walls(
     top, bottom = wall_rows(screen, world, eye)
     assert top == pytest.approx(HORIZON - (1 - eye) * scale, rel=0, abs=1)
     assert bottom == pytest.approx(min(HEIGHT, HORIZON + eye * scale), rel=0, abs=1)
-    world.maze[5][wall_x] = 0
 
 
 @pytest.mark.parametrize("eye", (EYE_HEIGHT, JUMP_PEAK), ids=("standing", "jumping"))

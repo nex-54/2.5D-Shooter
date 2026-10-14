@@ -36,7 +36,8 @@ def test_paused_game_ignores_aim_weapon_keys_and_the_resuming_click(
     state.ammo[WEAPONS[Weapon.SHOTGUN].ammo_pool] = 10
     send(pressed, state, key(pygame.K_ESCAPE))
     ammo = list(state.ammo)
-    send(pressed, state, pygame.event.Event(pygame.MOUSEMOTION, rel=(200, 0)), key(pygame.K_2))
+    switch = key(pygame.K_2, pygame.KSCAN_2)
+    send(pressed, state, pygame.event.Event(pygame.MOUSEMOTION, rel=(200, 0)), switch)
     assert state.pa == 0.0
     assert state.weapon == Weapon.PISTOL
 
@@ -44,6 +45,8 @@ def test_paused_game_ignores_aim_weapon_keys_and_the_resuming_click(
     assert not state.paused
     assert not state.mouse_held
     assert state.ammo == ammo
+    send(pressed, state, switch)
+    assert state.weapon == Weapon.SHOTGUN
 
 
 def test_q_quits_only_while_paused(pressed: set[int], state: GameState) -> None:
@@ -74,7 +77,7 @@ def test_resume_discards_motion_from_the_entire_event_batch(
     assert state.pa == 0.0
     assert pygame.KSCAN_W not in pressed
     send(pressed, state, pygame.event.Event(pygame.MOUSEMOTION, rel=(10, 0)))
-    assert round(abs(state.pa - 10 * MOUSE_SENSITIVITY), 7) == 0
+    assert state.pa == pytest.approx(10 * MOUSE_SENSITIVITY, rel=0, abs=5e-8)
 
 
 @pytest.mark.parametrize("escape", (True, False), ids=("escape", "focus-lost"))
@@ -93,7 +96,7 @@ def test_pause_and_resume_in_one_batch_also_discards_resume_motion(
         pygame.event.Event(pygame.MOUSEMOTION, rel=(200, 0)),
     )
     assert not state.paused
-    assert round(abs(state.pa - 10 * MOUSE_SENSITIVITY), 7) == 0
+    assert state.pa == pytest.approx(10 * MOUSE_SENSITIVITY, rel=0, abs=5e-8)
 
 
 def test_losing_focus_pauses_and_drops_held_input(pressed: set[int], state: GameState) -> None:

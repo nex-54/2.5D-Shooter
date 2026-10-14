@@ -5,7 +5,13 @@ from unittest.mock import patch
 import pygame
 import pytest
 
-from shooter.constants import INITIAL_AMMO, WEAPONS, Weapon
+from shooter.constants import (
+    INITIAL_AMMO,
+    PLAYER_MAX_HP,
+    SPAWN_GRACE_DURATION,
+    WEAPONS,
+    Weapon,
+)
 from shooter.entities import Boss, Enemy, HealthPack, Rocket
 from shooter.input import handle_events
 from shooter.map import DOOR_TILE
@@ -45,14 +51,61 @@ def test_lethal_rocket_damage_also_precedes_pickups(sfx: Sfx, state: GameState) 
     assert pack.active
 
 
-def test_living_player_can_still_heal(sfx: Sfx, state: GameState) -> None:
-    state.hp = 5
+@pytest.mark.parametrize(
+    "initial_hp, expected_hp",
+    ((5, 30), (PLAYER_MAX_HP - 5, PLAYER_MAX_HP)),
+    ids=("injured", "near-full"),
+)
+def test_health_pickups_heal_without_exceeding_maximum_hp(
+    initial_hp: int, expected_hp: int, sounds: SoundMocks, state: GameState
+) -> None:
+    state.hp = initial_hp
     pack = HealthPack(state.px, state.py)
     state.health_packs = [pack]
-    tick(sfx, state)
-    assert state.hp == 30
+    tick(sounds.sfx, state)
+    assert state.hp == expected_hp
     assert not pack.active
     assert not state.game_over
+    sounds["pickup"].play.assert_called_once()
+
+
+def test_full_health_preserves_a_pickup_until_the_player_is_hurt(
+    sounds: SoundMocks, state: GameState
+) -> None:
+    pack = HealthPack(state.px, state.py)
+    state.health_packs = [pack]
+    tick(sounds.sfx, state)
+    assert state.hp == PLAYER_MAX_HP
+    assert pack.active
+    sounds["pickup"].play.assert_not_called()
+
+    state.hp -= 5
+    tick(sounds.sfx, state)
+    assert state.hp == PLAYER_MAX_HP
+    assert not pack.active
+    sounds["pickup"].play.assert_called_once()
+
+
+def test_spawn_grace_prevents_attacks_until_the_timer_expires(
+    sounds: SoundMocks, state: GameState
+) -> None:
+    start_level(state, 1)
+    enemy = Enemy(state.px + 0.2, state.py)
+    state.enemies = [enemy]
+    assert state.spawn_grace == SPAWN_GRACE_DURATION
+
+    update_game(state, SPAWN_GRACE_DURATION - 1, Keys(), set(), sounds.sfx)
+    assert state.spawn_grace == 1
+    assert state.hp == PLAYER_MAX_HP
+    assert enemy.attacking
+    assert enemy.attack_cooldown == 0
+    sounds[enemy.attack_sound].play.assert_not_called()
+
+    update_game(state, 1, Keys(), set(), sounds.sfx)
+    assert state.spawn_grace == 0
+    assert state.hp == PLAYER_MAX_HP - enemy.damage
+    assert enemy.attack_cooldown == enemy.attack_cooldown_duration
+    sounds[enemy.attack_sound].play.assert_called_once()
 
 
 @pytest.mark.parametrize("status", ("paused", "game_over"))
