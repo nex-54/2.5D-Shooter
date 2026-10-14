@@ -1,9 +1,9 @@
 """Exercise typed cheat codes, damage immunity, and cheat lifecycle rules."""
 
-import unittest
 from unittest.mock import patch
 
 import pygame
+import pytest
 
 from shooter.combat import fire_weapon, update_enemies, update_rockets
 from shooter.constants import INITIAL_AMMO, MAX_AMMO, WEAPONS, Weapon
@@ -14,159 +14,183 @@ from shooter.state import GameState, reset_game, start_level
 from tests.support import Keys, SoundMocks, open_world
 
 
-class CheatTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.state = GameState(seed=0)
-        self.state.world = open_world()
-        self.sounds = SoundMocks()
-        self.pressed: set[int] = set()
+def send(
+    pressed: set[int], sounds: SoundMocks, state: GameState, *events: pygame.event.Event
+) -> bool:
+    with patch("shooter.input.pygame.event.get", return_value=list(events)):
+        return handle_events(state, sounds.sfx, pressed)
 
-    def send(self, *events: pygame.event.Event) -> bool:
-        with patch("shooter.input.pygame.event.get", return_value=list(events)):
-            return handle_events(self.state, self.sounds.sfx, self.pressed)
 
-    def type_code(self, code: str) -> bool:
-        events: list[pygame.event.Event] = []
-        for letter in code:
-            key = ord(letter.lower())
-            scancode = pygame.KSCAN_A + key - pygame.K_a
-            events.append(
-                pygame.event.Event(pygame.KEYDOWN, key=key, scancode=scancode, unicode=letter)
-            )
-            events.append(pygame.event.Event(pygame.KEYUP, key=key, scancode=scancode))
-        return self.send(*events)
+def type_code(pressed: set[int], sounds: SoundMocks, state: GameState, code: str) -> bool:
+    events: list[pygame.event.Event] = []
+    for letter in code:
+        key = ord(letter.lower())
+        scancode = pygame.KSCAN_A + key - pygame.K_a
+        events.append(
+            pygame.event.Event(pygame.KEYDOWN, key=key, scancode=scancode, unicode=letter)
+        )
+        events.append(pygame.event.Event(pygame.KEYUP, key=key, scancode=scancode))
+    return send(pressed, sounds, state, *events)
 
-    def test_iddqd_toggles_only_after_the_complete_code_across_frames(self) -> None:
-        self.assertFalse(self.state.god_mode)
-        for letter in "IdDq":
-            self.assertTrue(self.type_code(letter))
-            self.assertFalse(self.state.god_mode)
-        self.sounds["pickup"].play.assert_not_called()
-        # Modifier presses must not interrupt a code typed with mixed casing.
-        self.send(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LSHIFT, scancode=0))
-        self.assertTrue(self.type_code("D"))
-        self.assertTrue(self.state.god_mode)
-        self.sounds["pickup"].play.assert_called_once()
-        self.type_code("iddqd")
-        self.assertFalse(self.state.god_mode)
-        self.assertEqual(self.sounds["pickup"].play.call_count, 2)
 
-    def test_mistyped_codes_do_nothing_and_a_fresh_code_still_works(self) -> None:
-        self.type_code("wasd" * 100 + "iddqxddidkfxa")
-        self.assertFalse(self.state.god_mode)
-        self.assertEqual(self.state.ammo, list(INITIAL_AMMO))
-        self.assertLessEqual(len(self.state.cheat_buffer), 5)
-        self.sounds["pickup"].play.assert_not_called()
-        self.type_code("iiddqd")
-        self.assertTrue(self.state.god_mode)
+def test_iddqd_toggles_only_after_the_complete_code_across_frames(
+    pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    assert not state.god_mode
+    for letter in "IdDq":
+        assert type_code(pressed, sounds, state, letter)
+        assert not state.god_mode
+    sounds["pickup"].play.assert_not_called()
+    # Modifier presses must not interrupt a code typed with mixed casing.
+    send(
+        pressed, sounds, state, pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LSHIFT, scancode=0)
+    )
+    assert type_code(pressed, sounds, state, "D")
+    assert state.god_mode
+    sounds["pickup"].play.assert_called_once()
+    type_code(pressed, sounds, state, "iddqd")
+    assert not state.god_mode
+    assert sounds["pickup"].play.call_count == 2
 
-    def test_idkfa_unlocks_and_refills_every_weapon_without_switching_or_resetting_cooldowns(
-        self,
-    ) -> None:
-        self.state.ammo = [0] * len(MAX_AMMO)
-        self.state.weapon_cooldowns = [100] * len(WEAPONS)
-        self.type_code("IDKFA")
-        self.assertEqual(self.state.owned, [True] * len(WEAPONS))
-        self.assertEqual(self.state.ammo, list(MAX_AMMO))
-        self.assertEqual(self.state.weapon, Weapon.PISTOL)
-        self.assertEqual(self.state.weapon_cooldowns, [100] * len(WEAPONS))
-        self.assertFalse(self.state.god_mode)
-        self.sounds["pickup"].play.assert_called_once()
-        self.state.ammo = [0] * len(MAX_AMMO)
-        self.type_code("idkfa")
-        self.assertEqual(self.state.ammo, list(MAX_AMMO))
-        self.assertEqual(self.sounds["pickup"].play.call_count, 2)
 
-    def test_cheats_are_disabled_while_paused_dead_or_game_over(self) -> None:
-        for status in ("paused", "dead", "game_over"):
-            with self.subTest(status=status):
-                self.state.reset()
-                if status == "dead":
-                    self.state.hp = 0
-                else:
-                    setattr(self.state, status, True)
-                self.type_code("iddqd")
-                self.type_code("idkfa")
-                self.assertFalse(self.state.god_mode)
-                self.assertEqual(self.state.owned, [weapon.initially_owned for weapon in WEAPONS])
-                self.assertEqual(self.state.ammo, list(INITIAL_AMMO))
-        self.sounds["pickup"].play.assert_not_called()
+def test_mistyped_codes_do_nothing_and_a_fresh_code_still_works(
+    pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    type_code(pressed, sounds, state, "wasd" * 100 + "iddqxddidkfxa")
+    assert not state.god_mode
+    assert state.ammo == list(INITIAL_AMMO)
+    assert len(state.cheat_buffer) <= 5
+    sounds["pickup"].play.assert_not_called()
+    type_code(pressed, sounds, state, "iiddqd")
+    assert state.god_mode
 
-    def test_pausing_or_losing_focus_discards_a_partial_code(self) -> None:
-        for pause in (
-            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, scancode=pygame.KSCAN_ESCAPE),
-            pygame.event.Event(pygame.WINDOWFOCUSLOST),
-        ):
-            with self.subTest(pause=pause):
-                self.type_code("iddq")
-                self.send(pause)
-                self.send(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1))
-                self.type_code("d")
-                self.assertFalse(self.state.god_mode)
-                self.type_code("iddqd")
-                self.assertTrue(self.state.god_mode)
-                self.state.reset()
 
-    def test_god_mode_blocks_every_enemy_type_and_damage_resumes_when_disabled(self) -> None:
-        for enemy_type in (Enemy, Scout, Spider, Boss):
-            with self.subTest(enemy=enemy_type.__name__):
-                self.state.reset()
-                self.state.world = open_world()
-                self.state.hp = 1
-                enemy = enemy_type(self.state.px + 0.5, self.state.py)
-                self.state.enemies = [enemy]
-                self.type_code("iddqd")
-                update_game(self.state, 16, Keys(), set(), self.sounds.sfx)
-                self.assertEqual(self.state.hp, 1)
-                self.assertFalse(self.state.game_over)
-                self.assertEqual(self.state.damage_cooldown, 0)
-                self.assertTrue(enemy.attacking)
-                self.type_code("iddqd")
-                update_enemies(self.state, 16, self.sounds.sfx)
-                self.assertEqual(self.state.hp, 1 - enemy.damage)
+def test_idkfa_unlocks_and_refills_every_weapon_without_switching_or_resetting_cooldowns(
+    pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    state.ammo = [0] * len(MAX_AMMO)
+    state.weapon_cooldowns = [100] * len(WEAPONS)
+    type_code(pressed, sounds, state, "IDKFA")
+    assert state.owned == [True] * len(WEAPONS)
+    assert state.ammo == list(MAX_AMMO)
+    assert state.weapon == Weapon.PISTOL
+    assert state.weapon_cooldowns == [100] * len(WEAPONS)
+    assert not state.god_mode
+    sounds["pickup"].play.assert_called_once()
+    state.ammo = [0] * len(MAX_AMMO)
+    type_code(pressed, sounds, state, "idkfa")
+    assert state.ammo == list(MAX_AMMO)
+    assert sounds["pickup"].play.call_count == 2
 
-    def test_god_mode_blocks_rocket_splash_without_protecting_enemies(self) -> None:
-        self.state.px, self.state.py = 4.5, 5.5
-        self.state.hp = 1
-        enemy = Enemy(5.5, 5.5)
-        self.state.enemies = [enemy]
-        rocket = Rocket(self.state.px, self.state.py, 0.0)
-        self.state.rockets = [rocket]
-        self.type_code("iddqd")
-        update_rockets(self.state, 100, self.sounds.sfx)
-        self.assertTrue(rocket.exploded)
-        self.assertFalse(enemy.alive)
-        self.assertEqual(self.state.kills, 1)
-        self.assertEqual(self.state.hp, 1)
-        self.assertEqual(self.state.damage_cooldown, 0)
-        self.sounds["explosion"].play.assert_called_once()
 
-    def test_god_mode_blocks_muzzle_explosions_and_can_be_disabled(self) -> None:
-        self.state.world.maze[5][5] = 1
-        self.state.px, self.state.py = 4.79, 5.5
-        self.type_code("idkfaiddqd")
-        self.state.switch_weapon(Weapon.ROCKETS)
-        hp = self.state.hp
-        fire_weapon(self.state, self.sounds.sfx)
-        self.assertTrue(self.state.rockets[0].exploded)
-        self.assertEqual(self.state.hp, hp)
-        self.type_code("iddqd")
-        self.state.shoot_timer = 0
-        fire_weapon(self.state, self.sounds.sfx)
-        self.assertLess(self.state.hp, hp)
+@pytest.mark.parametrize("status", ("paused", "dead", "game_over"))
+def test_cheats_are_disabled_while_paused_dead_or_game_over(
+    status: str, pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    state.reset()
+    if status == "dead":
+        state.hp = 0
+    else:
+        setattr(state, status, True)
+    type_code(pressed, sounds, state, "iddqd")
+    type_code(pressed, sounds, state, "idkfa")
+    assert not state.god_mode
+    assert state.owned == [weapon.initially_owned for weapon in WEAPONS]
+    assert state.ammo == list(INITIAL_AMMO)
+    sounds["pickup"].play.assert_not_called()
 
-    def test_level_changes_preserve_cheats_and_restart_clears_them(self) -> None:
-        self.type_code("iddqdidkfaiddq")
-        start_level(self.state, 2)
-        self.assertTrue(self.state.god_mode)
-        self.assertEqual(self.state.owned, [True] * len(WEAPONS))
-        self.assertEqual(self.state.ammo, list(MAX_AMMO))
-        self.type_code("d")
-        self.assertTrue(self.state.god_mode)
-        self.type_code("iddq")
-        reset_game(self.state)
-        self.assertFalse(self.state.god_mode)
-        self.assertEqual(self.state.owned, [weapon.initially_owned for weapon in WEAPONS])
-        self.assertEqual(self.state.ammo, list(INITIAL_AMMO))
-        self.type_code("d")
-        self.assertFalse(self.state.god_mode)
+
+@pytest.mark.parametrize("escape", (True, False), ids=("escape", "focus-lost"))
+def test_pausing_or_losing_focus_discards_a_partial_code(
+    escape: bool, pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    pause = (
+        pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, scancode=pygame.KSCAN_ESCAPE)
+        if escape
+        else pygame.event.Event(pygame.WINDOWFOCUSLOST)
+    )
+    type_code(pressed, sounds, state, "iddq")
+    send(pressed, sounds, state, pause)
+    send(pressed, sounds, state, pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1))
+    type_code(pressed, sounds, state, "d")
+    assert not state.god_mode
+    type_code(pressed, sounds, state, "iddqd")
+    assert state.god_mode
+    state.reset()
+
+
+@pytest.mark.parametrize(
+    "enemy_type", (Enemy, Scout, Spider, Boss), ids=("enemy", "scout", "spider", "boss")
+)
+def test_god_mode_blocks_every_enemy_type_and_damage_resumes_when_disabled(
+    enemy_type: type[Enemy], pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    state.reset()
+    state.world = open_world()
+    state.hp = 1
+    enemy = enemy_type(state.px + 0.5, state.py)
+    state.enemies = [enemy]
+    type_code(pressed, sounds, state, "iddqd")
+    update_game(state, 16, Keys(), set(), sounds.sfx)
+    assert state.hp == 1
+    assert not state.game_over
+    assert state.damage_cooldown == 0
+    assert enemy.attacking
+    type_code(pressed, sounds, state, "iddqd")
+    update_enemies(state, 16, sounds.sfx)
+    assert state.hp == 1 - enemy.damage
+
+
+def test_god_mode_blocks_rocket_splash_without_protecting_enemies(
+    pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    state.px, state.py = 4.5, 5.5
+    state.hp = 1
+    enemy = Enemy(5.5, 5.5)
+    state.enemies = [enemy]
+    rocket = Rocket(state.px, state.py, 0.0)
+    state.rockets = [rocket]
+    type_code(pressed, sounds, state, "iddqd")
+    update_rockets(state, 100, sounds.sfx)
+    assert rocket.exploded
+    assert not enemy.alive
+    assert state.kills == 1
+    assert state.hp == 1
+    assert state.damage_cooldown == 0
+    sounds["explosion"].play.assert_called_once()
+
+
+def test_god_mode_blocks_muzzle_explosions_and_can_be_disabled(
+    pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    state.world.maze[5][5] = 1
+    state.px, state.py = 4.79, 5.5
+    type_code(pressed, sounds, state, "idkfaiddqd")
+    state.switch_weapon(Weapon.ROCKETS)
+    hp = state.hp
+    fire_weapon(state, sounds.sfx)
+    assert state.rockets[0].exploded
+    assert state.hp == hp
+    type_code(pressed, sounds, state, "iddqd")
+    state.shoot_timer = 0
+    fire_weapon(state, sounds.sfx)
+    assert state.hp < hp
+
+
+def test_level_changes_preserve_cheats_and_restart_clears_them(
+    pressed: set[int], sounds: SoundMocks, state: GameState
+) -> None:
+    type_code(pressed, sounds, state, "iddqdidkfaiddq")
+    start_level(state, 2)
+    assert state.god_mode
+    assert state.owned == [True] * len(WEAPONS)
+    assert state.ammo == list(MAX_AMMO)
+    type_code(pressed, sounds, state, "d")
+    assert state.god_mode
+    type_code(pressed, sounds, state, "iddq")
+    reset_game(state)
+    assert not state.god_mode
+    assert state.owned == [weapon.initially_owned for weapon in WEAPONS]
+    assert state.ammo == list(INITIAL_AMMO)
+    type_code(pressed, sounds, state, "d")
+    assert not state.god_mode

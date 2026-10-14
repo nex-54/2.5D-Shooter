@@ -3,23 +3,25 @@
 import os
 import subprocess
 import sys
-import unittest
+
+import pytest
 
 
-class StartupTests(unittest.TestCase):
-    def run_script(self, script: str, *args: str) -> None:
-        result = subprocess.run(
-            [sys.executable, "-c", script, *args],
-            env={**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"},
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+def run_script(script: str, *args: str) -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", script, *args],
+        env={**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
-    def test_initialization_render_and_quit(self) -> None:
-        script = """
+
+@pytest.mark.parametrize("entry_point", ("script", "module"))
+def test_initialization_render_and_quit(entry_point: str) -> None:
+    script = """
 import runpy
 import sys
 import pygame
@@ -47,12 +49,11 @@ except SystemExit as exc:
 assert frames == 3, frames
 assert not pygame.get_init()
 """
-        for entry_point in ("script", "module"):
-            with self.subTest(entry_point=entry_point):
-                self.run_script(script, entry_point)
+    run_script(script, entry_point)
 
-    def test_startup_and_loop_failures_release_pygame_resources(self) -> None:
-        self.run_script("""
+
+def test_startup_and_loop_failures_release_pygame_resources() -> None:
+    run_script("""
 import pygame
 from unittest.mock import patch
 from shooter import app

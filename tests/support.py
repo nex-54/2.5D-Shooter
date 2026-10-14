@@ -1,4 +1,4 @@
-"""Independent world and keyboard fixtures for simulation tests."""
+"""Independent world, sound, and keyboard helpers for simulation tests."""
 
 from collections import defaultdict
 from typing import cast

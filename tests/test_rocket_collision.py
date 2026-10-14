@@ -1,10 +1,10 @@
 """Projectile contact must agree with walls and splash visibility at every step."""
 
 import math
-import unittest
 from unittest.mock import patch
 
 import pygame
+import pytest
 
 from shooter.combat import update_rockets
 from shooter.constants import WEAPONS, Weapon
@@ -12,92 +12,101 @@ from shooter.entities import Enemy, Rocket
 from shooter.input import handle_events
 from shooter.map import BARRIER_TILE, DOOR_TILE
 from shooter.state import GameState
-from tests.support import SoundMocks, open_world
+from shooter.types import Sfx
+from tests.support import SoundMocks
 
 
-class RocketCollisionTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.state = GameState(seed=0)
-        self.state.world = open_world()
-        self.state.px, self.state.py = 1.5, 1.5
-        self.sounds = SoundMocks()
-        self.sfx = self.sounds.sfx
+@pytest.mark.parametrize("reverse", (False, True), ids=("forward", "reverse"))
+@pytest.mark.parametrize(
+    "start, end",
+    (
+        ((2.9, 3.2), (3.2, 2.9)),
+        ((3.8, 2.9), (4.1, 3.2)),
+        ((4.1, 3.8), (3.8, 4.1)),
+        ((3.2, 4.1), (2.9, 3.8)),
+        ((2.9, 3.1), (3.1, 2.9)),
+    ),
+    ids=("northwest", "northeast", "southeast", "southwest", "exact-corner"),
+)
+@pytest.mark.parametrize("tile", (1, DOOR_TILE), ids=("wall", "door"))
+def test_corners_stop_rockets_even_when_both_endpoints_are_clear(
+    reverse: bool,
+    start: tuple[float, float],
+    end: tuple[float, float],
+    tile: int,
+    sfx: Sfx,
+    state: GameState,
+) -> None:
+    state.world.maze[3][3] = tile
+    source, target = (end, start) if reverse else (start, end)
+    rocket = Rocket(*source, math.atan2(target[1] - source[1], target[0] - source[0]))
+    state.rockets = [rocket]
+    update_rockets(state, 50, sfx)
+    assert rocket.exploded
+    assert not state.world.blocks_sight(rocket.x, rocket.y)
+    assert state.world.has_line_of_sight(*source, rocket.x, rocket.y)
 
-    def test_corners_stop_rockets_even_when_both_endpoints_are_clear(self) -> None:
-        paths = (
-            ((2.9, 3.2), (3.2, 2.9)),
-            ((3.8, 2.9), (4.1, 3.2)),
-            ((4.1, 3.8), (3.8, 4.1)),
-            ((3.2, 4.1), (2.9, 3.8)),
-            ((2.9, 3.1), (3.1, 2.9)),
-        )
-        for tile in (1, DOOR_TILE):
-            self.state.world.maze[3][3] = tile
-            for start, end in paths:
-                for source, target in ((start, end), (end, start)):
-                    with self.subTest(tile=tile, source=source, target=target):
-                        rocket = Rocket(
-                            *source, math.atan2(target[1] - source[1], target[0] - source[0])
-                        )
-                        self.state.rockets = [rocket]
-                        update_rockets(self.state, 50, self.sfx)
-                        self.assertTrue(rocket.exploded)
-                        self.assertFalse(self.state.world.blocks_sight(rocket.x, rocket.y))
-                        self.assertTrue(
-                            self.state.world.has_line_of_sight(*source, rocket.x, rocket.y)
-                        )
 
-    def test_wall_contact_is_independent_of_frame_size(self) -> None:
-        self.state.world.maze[5][5] = 1
-        for dt in (8, 16, 50):
-            with self.subTest(dt=dt):
-                rocket = Rocket(2.9, 5.5, 0.0)
-                self.state.rockets = [rocket]
-                for _ in range(100):
-                    update_rockets(self.state, dt, self.sfx)
-                    if rocket.exploded:
-                        break
-                self.assertTrue(rocket.exploded)
-                self.assertAlmostEqual(rocket.x, 5.0, places=5)
-                self.assertLess(rocket.x, 5.0)
+@pytest.mark.parametrize("dt", (8, 16, 50))
+def test_wall_contact_is_independent_of_frame_size(dt: int, sfx: Sfx, state: GameState) -> None:
+    state.world.maze[5][5] = 1
+    rocket = Rocket(2.9, 5.5, 0.0)
+    state.rockets = [rocket]
+    for _ in range(100):
+        update_rockets(state, dt, sfx)
+        if rocket.exploded:
+            break
+    assert rocket.exploded
+    assert round(abs(rocket.x - 5.0), 5) == 0
+    assert rocket.x < 5.0
 
-    def test_muzzle_hits_close_wall_and_applies_self_damage_on_clear_side(self) -> None:
-        self.state.world.maze[5][5] = 1
-        self.state.px, self.state.py = 4.79, 5.5
-        self.state.weapon = Weapon.ROCKETS
-        self.state.owned[Weapon.ROCKETS] = True
-        self.state.ammo[WEAPONS[Weapon.ROCKETS].ammo_pool] = 1
-        click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1)
-        with patch("shooter.input.pygame.event.get", return_value=[click]):
-            handle_events(self.state, self.sfx, set())
-        rocket = self.state.rockets[0]
-        self.assertTrue(rocket.exploded)
-        self.assertLess(rocket.x, 5)
-        self.assertFalse(self.state.world.blocks_sight(rocket.x, rocket.y))
-        self.assertLess(self.state.hp, 100)
-        hp = self.state.hp
-        update_rockets(self.state, 16, self.sfx)
-        self.assertEqual(self.state.hp, hp)
-        self.sounds["explosion"].play.assert_called_once()
 
-    def test_near_corner_miss_and_barriers_remain_clear(self) -> None:
-        for tile, source in ((1, (2.8, 3.1)), (BARRIER_TILE, (2.9, 3.2))):
-            with self.subTest(tile=tile):
-                self.state.world.maze[3][3] = tile
-                rocket = Rocket(*source, -math.pi / 4)
-                self.state.rockets = [rocket]
-                update_rockets(self.state, 50, self.sfx)
-                self.assertFalse(rocket.exploded)
+def test_muzzle_hits_close_wall_and_applies_self_damage_on_clear_side(
+    sfx: Sfx, sounds: SoundMocks, state: GameState
+) -> None:
+    state.world.maze[5][5] = 1
+    state.px, state.py = 4.79, 5.5
+    state.weapon = Weapon.ROCKETS
+    state.owned[Weapon.ROCKETS] = True
+    state.ammo[WEAPONS[Weapon.ROCKETS].ammo_pool] = 1
+    click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1)
+    with patch("shooter.input.pygame.event.get", return_value=[click]):
+        handle_events(state, sfx, set())
+    rocket = state.rockets[0]
+    assert rocket.exploded
+    assert rocket.x < 5
+    assert not state.world.blocks_sight(rocket.x, rocket.y)
+    assert state.hp < 100
+    hp = state.hp
+    update_rockets(state, 16, sfx)
+    assert state.hp == hp
+    sounds["explosion"].play.assert_called_once()
 
-    def test_enemy_contacts_are_swept_and_nearest_contact_wins(self) -> None:
-        near = Enemy(5.0, 5.5)
-        far = Enemy(8.0, 5.5)
-        self.state.enemies = [far, near]
-        rocket = Rocket(2.9, 5.5, 0.0)
-        self.state.rockets = [rocket]
-        update_rockets(self.state, 1000, self.sfx)
-        self.assertTrue(rocket.exploded)
-        self.assertAlmostEqual(rocket.x, 4.4)
-        self.assertFalse(near.alive)
-        self.assertEqual(far.hp, far.max_hp)
-        self.assertEqual(self.state.kills, 1)
+
+@pytest.mark.parametrize(
+    "tile, source",
+    ((1, (2.8, 3.1)), (BARRIER_TILE, (2.9, 3.2))),
+    ids=("wall-miss", "barrier-crossing"),
+)
+def test_near_corner_miss_and_barriers_remain_clear(
+    tile: int, source: tuple[float, float], sfx: Sfx, state: GameState
+) -> None:
+    state.world.maze[3][3] = tile
+    rocket = Rocket(*source, -math.pi / 4)
+    state.rockets = [rocket]
+    update_rockets(state, 50, sfx)
+    assert not rocket.exploded
+
+
+def test_enemy_contacts_are_swept_and_nearest_contact_wins(sfx: Sfx, state: GameState) -> None:
+    near = Enemy(5.0, 5.5)
+    far = Enemy(8.0, 5.5)
+    state.enemies = [far, near]
+    rocket = Rocket(2.9, 5.5, 0.0)
+    state.rockets = [rocket]
+    update_rockets(state, 1000, sfx)
+    assert rocket.exploded
+    assert round(abs(rocket.x - 4.4), 7) == 0
+    assert not near.alive
+    assert far.hp == far.max_hp
+    assert state.kills == 1

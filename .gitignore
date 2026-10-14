@@ -2,6 +2,7 @@ __pycache__/
 .claude/
 .DS_Store
 .venv/
+.pytest_cache/
 *.pyc
 env/
 venv/

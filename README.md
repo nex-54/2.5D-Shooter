@@ -88,10 +88,19 @@ Run the same checks as CI:
 ruff check .
 ruff format --check .
 pyright
-python -m unittest discover -s tests -v
+python -m pytest -v
 ```
 
 Use `ruff format .` to apply formatting. Ruff configuration lives in `pyproject.toml`. Pyright checks the package, entry point, and tests in strict mode without diagnostic suppressions; its configuration uses the project's `.venv`.
+
+Run one test module or a single test with:
+
+```bash
+python -m pytest tests/test_cheats.py -v
+python -m pytest tests/test_cheats.py::test_mistyped_codes_do_nothing_and_a_fresh_code_still_works -v
+```
+
+Pytest configuration lives in `pyproject.toml`. Shared fixtures are in `tests/conftest.py`, and reusable helpers are in `tests/support.py`.
 
 ## License
 

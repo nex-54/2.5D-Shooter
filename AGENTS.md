@@ -10,7 +10,7 @@ Before task work, read [README.md](README.md) in full; it's the source for requi
 
 In `shooter/`, `app.py` handles startup/shutdown, `game.py` orchestrates frames, and `input.py`, `simulation.py`, and `combat.py` handle gameplay. `state.py` and `map.py` own state; `entities.py` defines enemies, pickups, and spawning.
 
-Rendering uses `render_*.py`, `raycaster.py`, and `occlusion.py`. Shared definitions live in `constants.py` and `types.py`. Runtime assets come from `textures.py`, `sound.py`, and `weapon_models.py` (weapon artwork). `screenshots/` holds README illustrations; `tests/` holds tests and reusable fixtures in `tests/support.py`.
+Rendering uses `render_*.py`, `raycaster.py`, and `occlusion.py`. Shared definitions live in `constants.py` and `types.py`. Runtime assets come from `textures.py`, `sound.py`, and `weapon_models.py` (weapon artwork). `screenshots/` holds README illustrations; `tests/` holds tests, shared pytest fixtures in `tests/conftest.py`, and reusable helpers in `tests/support.py`.
 
 ## Architecture
 
@@ -69,7 +69,7 @@ To add a sprite type, add it to the union and dispatch in `draw_world_sprites`, 
 
 README.md covers setup, launch, and the CI checks. Beyond those:
 
-- `python -m unittest tests.test_cheats -v`: run one module; append `.CheatTests.test_<name>` for one test.
+- `python -m pytest tests/test_cheats.py -v`: run one module; append `::test_<name>` to the path for one test. Use `-k <expression>` to select tests or parametrized cases by name.
 - Without an activated venv, prefix tools with `.venv/bin/`, as `.github/workflows/typecheck.yml` does.
 
 ## Coding Style & Naming Conventions
@@ -80,14 +80,16 @@ This codebase is 100% AI-generated. Comments are optional: retain explanations o
 
 ## Testing Guidelines
 
-Use standard-library `unittest`, `test_*.py` files, and descriptive `test_*` methods. Add regression tests for gameplay/rendering fixes.
+Use pytest, `test_*.py` files, and descriptive `test_*` functions with plain assertions. Annotate fixture parameters and return types for strict Pyright. Add regression tests for gameplay/rendering fixes.
 
-- Reuse the fixtures in `tests/support.py`:
+- Reuse function-scoped fixtures in `tests/conftest.py`: `world`, `state`, `sounds`, `sfx`, `pressed`, `screen`, `depth`, and `font`. The `state` fixture uses `GameState(seed=0)` and the same open map as `world`. Keep specialized fixtures in their test modules.
+- Reuse the helpers in `tests/support.py`:
   - `open_world()`: an empty map with border walls.
   - `SoundMocks`: pass `.sfx` into the code; index by name to assert `.play` calls.
   - `Keys(*down)`: a `KeyState` stand-in.
-- Simulation tests usually follow this pattern: `GameState(seed=0)`, set `state.world = open_world()`, edit maze tiles or place entities, then call `update_game(state, 16, Keys(), set(), sfx)`.
-- Rendering tests draw onto an off-screen `pygame.Surface((WIDTH, HEIGHT))` and check pixels. They need no display, but call `pygame.freetype.init()` when fonts are involved. Only `test_startup.py` launches the real app, in a subprocess with SDL dummy video/audio drivers.
+- Parametrize independent cases with readable IDs; create mutable entities inside tests or fixtures. Keep sequential cache invalidation and lifecycle checks within one test. Existing mocks use `unittest.mock`.
+- Simulation tests usually request `state` and `sfx`, edit maze tiles or place entities, then call `update_game(state, 16, Keys(), set(), sfx)`.
+- Rendering tests draw onto an off-screen `pygame.Surface((WIDTH, HEIGHT))` and check pixels. They need no display; request the `font` fixture when fonts are involved so FreeType initialization is restored after the test. Only `test_startup.py` launches the real app, in a subprocess with SDL dummy video/audio drivers.
 
 ## Commit & Pull Request Guidelines
 
