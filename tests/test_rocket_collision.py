@@ -7,8 +7,8 @@ import pygame
 import pytest
 
 from shooter.combat import update_rockets
-from shooter.constants import WEAPONS, Weapon
-from shooter.entities import Enemy, Rocket
+from shooter.constants import EXPLOSION_DURATION, PLAYER_MAX_HP, WEAPONS, Weapon
+from shooter.entities import Boss, Enemy, Rocket
 from shooter.input import handle_events
 from shooter.map import BARRIER_TILE, DOOR_TILE
 from shooter.state import GameState
@@ -110,3 +110,46 @@ def test_enemy_contacts_are_swept_and_nearest_contact_wins(sfx: Sfx, state: Game
     assert not near.alive
     assert far.hp == far.max_hp
     assert state.kills == 1
+
+
+@pytest.mark.parametrize("final_step", (1, 50), ids=("exact-expiry", "past-expiry"))
+def test_explosions_expire_without_repeating_damage_or_removing_live_rockets(
+    final_step: int, sounds: SoundMocks, state: GameState
+) -> None:
+    state.px, state.py = 4.5, 5.5
+    target = Boss(5.5, 5.5)
+    state.enemies = [target]
+    rocket = Rocket(state.px, state.py, 0.0)
+    flying = Rocket(2.5, 10.5, 0.0)
+    state.rockets = [rocket, flying]
+
+    update_rockets(state, 100, sounds.sfx)
+    assert rocket.exploded
+    assert rocket.alive
+    assert rocket.explosion_timer == EXPLOSION_DURATION
+    assert 0 < target.hp < target.max_hp
+    assert 0 < state.hp < PLAYER_MAX_HP
+    hp, target_hp = state.hp, target.hp
+    impact = rocket.x, rocket.y
+    # Damage immunity must not hide a repeated explosion.
+    state.damage_cooldown = 0
+
+    update_rockets(state, EXPLOSION_DURATION - 1, sounds.sfx)
+    assert rocket.alive
+    assert rocket.explosion_timer == 1
+    assert state.rockets == [rocket, flying]
+    assert (rocket.x, rocket.y) == impact
+    assert (state.hp, target.hp) == (hp, target_hp)
+    flying_x = flying.x
+
+    update_rockets(state, final_step, sounds.sfx)
+    assert not rocket.alive
+    assert state.rockets == [flying]
+    assert flying.alive and not flying.exploded
+    assert flying.x > flying_x
+
+    update_rockets(state, 16, sounds.sfx)
+    assert (state.hp, target.hp) == (hp, target_hp)
+    assert state.kills == 0
+    sounds["explosion"].play.assert_called_once()
+    sounds["enemy_hurt"].play.assert_called_once()

@@ -27,12 +27,14 @@ import sys
 import pygame
 from unittest.mock import patch
 from shooter import game
+from shooter.constants import SAMPLE_RATE
 
 frames = 0
 draw_frame = game.draw_frame
 
 def draw(*args, **kwargs):
     global frames
+    assert pygame.mixer.get_init() == (SAMPLE_RATE, -16, 1), pygame.mixer.get_init()
     draw_frame(*args, **kwargs)
     frames += 1
     if frames == 3:

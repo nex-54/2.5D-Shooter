@@ -16,6 +16,7 @@ from shooter.constants import (
     JUMP_VELOCITY,
     PLAYER_MARGIN,
     PLAYER_MOVE_SPEED,
+    PLAYER_SPRINT_MULT,
 )
 from shooter.entities import Boss, Enemy
 from shooter.input import handle_events
@@ -82,6 +83,40 @@ def test_movement_key_events_start_hold_and_stop_motion(
     stopped = state.px, state.py
     assert not update_game(state, 16, Keys(), pressed, sfx)
     assert (state.px, state.py) == stopped
+
+
+@pytest.mark.parametrize(
+    "shift", (None, pygame.K_LSHIFT, pygame.K_RSHIFT), ids=("walk", "left-shift", "right-shift")
+)
+@pytest.mark.parametrize("angle", (0.0, math.pi / 3), ids=("east", "turned"))
+@pytest.mark.parametrize("dt", (16, 50))
+@pytest.mark.parametrize(
+    "scancodes",
+    (
+        (pygame.KSCAN_W,),
+        (pygame.KSCAN_W, pygame.KSCAN_A),
+        (pygame.KSCAN_W, pygame.KSCAN_D),
+        (pygame.KSCAN_S, pygame.KSCAN_A),
+        (pygame.KSCAN_S, pygame.KSCAN_D),
+    ),
+    ids=("straight", "forward-left", "forward-right", "back-left", "back-right"),
+)
+def test_straight_and_diagonal_movement_share_walk_and_sprint_speeds(
+    shift: int | None,
+    angle: float,
+    dt: int,
+    scancodes: tuple[int, ...],
+    sfx: Sfx,
+    state: GameState,
+) -> None:
+    state.px, state.py, state.pa = 5.5, 5.5, angle
+    keys = Keys() if shift is None else Keys(shift)
+
+    assert update_player(state, dt, keys, set(scancodes), sfx)
+
+    distance = math.hypot(state.px - 5.5, state.py - 5.5)
+    expected = PLAYER_MOVE_SPEED * dt * (1 if shift is None else PLAYER_SPRINT_MULT)
+    assert distance == pytest.approx(expected, rel=0, abs=1e-9)
 
 
 def test_exit_stays_shut_until_the_boss_dies(sfx: Sfx, state: GameState, world: LevelState) -> None:

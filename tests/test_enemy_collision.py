@@ -1,4 +1,4 @@
-"""Wandering enemies respect the same solid tiles as chasing enemies."""
+"""Wandering and chasing enemies respect solid tiles while moving through clear space."""
 
 import math
 import random
@@ -6,7 +6,7 @@ import random
 import pytest
 
 from shooter.entities import Boss, Enemy, Scout, Spider
-from shooter.map import BARRIER_TILE, DOOR_TILE, EXIT_TILE, WALL_TILE
+from shooter.map import BARRIER_TILE, DOOR_TILE, EXIT_TILE, WALL_TILE, LevelState
 from tests.support import open_world
 
 
@@ -56,3 +56,56 @@ def test_wandering_still_moves_through_clear_space(enemy_type: type[Enemy]) -> N
     assert enemy.x > 10.5
     assert enemy.y > 10.5
     assert enemy.moving
+
+
+@pytest.mark.parametrize(
+    "dx, dy",
+    ((1, 0), (-1, 0), (0, 1), (0, -1)),
+    ids=("east", "west", "south", "north"),
+)
+@pytest.mark.parametrize(
+    "enemy_type, tile",
+    [
+        pytest.param(enemy_type, tile, id=f"{enemy_type.__name__.lower()}-{name}")
+        for enemy_type in (Enemy, Scout, Spider, Boss)
+        for tile, name in (
+            (WALL_TILE, "wall"),
+            (DOOR_TILE, "door"),
+            (BARRIER_TILE, "barrier"),
+            (EXIT_TILE, "exit"),
+        )
+        # Bosses only chase with line of sight; opaque tiles trigger wandering instead.
+        if enemy_type is not Boss or tile in (BARRIER_TILE, EXIT_TILE)
+    ],
+)
+def test_chasing_enemies_cannot_cross_solid_tiles(
+    dx: int, dy: int, enemy_type: type[Enemy], tile: int, world: LevelState
+) -> None:
+    world.maze[10][10] = tile
+    x, y = 10.5 - dx * 0.501, 10.5 - dy * 0.501
+    enemy = enemy_type(x, y, random.Random(0))
+    enemy.alert = True
+
+    enemy.update(world, x + dx * 4, y + dy * 4, 50)
+
+    assert enemy.alert
+    assert not enemy.attacking
+    assert (enemy.x, enemy.y) == (x, y)
+
+
+@pytest.mark.parametrize(
+    "enemy_type", (Enemy, Scout, Spider, Boss), ids=("enemy", "scout", "spider", "boss")
+)
+def test_chasing_enemies_advance_toward_a_visible_player(
+    enemy_type: type[Enemy], world: LevelState
+) -> None:
+    enemy = enemy_type(10.5, 10.5, random.Random(0))
+
+    enemy.update(world, 14.5, 14.5, 50)
+
+    assert enemy.alert
+    assert enemy.moving
+    assert not enemy.attacking
+    assert enemy.x > 10.5
+    assert enemy.y > 10.5
+    assert math.hypot(enemy.x - 10.5, enemy.y - 10.5) == pytest.approx(enemy.speed * 50)

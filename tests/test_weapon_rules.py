@@ -6,7 +6,15 @@ import pygame
 import pytest
 
 from shooter.combat import update_combat
-from shooter.constants import EMPTY_CLICK_DELAY, MAX_AMMO, PISTOL_DAMAGE, WEAPONS, Weapon
+from shooter.constants import (
+    EMPTY_CLICK_DELAY,
+    MAX_AMMO,
+    PISTOL_DAMAGE,
+    SHOTGUN_PELLETS,
+    SHOTGUN_RANGE,
+    WEAPONS,
+    Weapon,
+)
 from shooter.entities import PICKUP_WEAPONS, Boss, Enemy, WeaponPickup
 from shooter.input import handle_events
 from shooter.map import LevelState
@@ -305,6 +313,28 @@ def test_shotgun_counts_a_kill_once_despite_multiple_pellets(
     assert not target.alive
     assert state.kills == 1
     sounds["enemy_die"].play.assert_called_once()
+
+
+@pytest.mark.parametrize("offset, hits", ((-0.01, True), (0.01, False)), ids=("inside", "outside"))
+def test_shotgun_range_ends_at_the_first_contact_with_the_target(
+    offset: float, hits: bool, sounds: SoundMocks, state: GameState
+) -> None:
+    target = Boss(state.px + SHOTGUN_RANGE + Boss.hit_radius + offset, state.py)
+    state.enemies = [target]
+    state.owned[Weapon.SHOTGUN] = True
+    state.weapon = Weapon.SHOTGUN
+    pool = WEAPONS[Weapon.SHOTGUN].ammo_pool
+    state.ammo[pool] = 1
+
+    # Keep pellets on the centerline so this measures range independently of spread.
+    with patch.object(state.rng, "uniform", return_value=0.0):
+        fire(sounds, state)
+
+    assert state.ammo[pool] == 0
+    sounds["shotgun"].play.assert_called_once()
+    assert target.hp == target.max_hp - (SHOTGUN_PELLETS if hits else 0)
+    assert target.alive
+    assert state.kills == 0
 
 
 def test_nuke_kills_regular_enemies_but_spares_boss(sounds: SoundMocks, state: GameState) -> None:
