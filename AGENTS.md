@@ -70,7 +70,7 @@ To add a sprite type, add it to the union and dispatch in `draw_world_sprites`, 
 README.md covers setup, launch, and the CI checks. Beyond those:
 
 - `python -m pytest tests/test_cheats.py -v`: run one module; append `::test_<name>` to the path for one test. Use `-k <expression>` to select tests or parametrized cases by name.
-- Without an activated venv, prefix tools with `.venv/bin/`, as `.github/workflows/typecheck.yml` does.
+- Without an activated venv, prefix tools with `.venv/bin/`, as `.github/workflows/ci.yml` does.
 
 ## Coding Style & Naming Conventions
 
