@@ -107,10 +107,7 @@ def test_sampled_pixels_match_recorded_baseline(
         assert not screen.get_locked()
 
 
-@pytest.mark.parametrize("x", (0, WIDTH // 4, WIDTH - 1), ids=("left", "quarter", "right"))
-def test_lines_facing_the_camera_stay_straight(
-    x: int, screen: pygame.Surface, world: LevelState
-) -> None:
+def test_lines_facing_the_camera_stay_straight(screen: pygame.Surface, world: LevelState) -> None:
     # Texel column 0 marks every integer x on the floor and ceiling. Facing
     # +x, each mark lies at one perpendicular distance, so every screen
     # column must show it on the same rows; unit-length rays bent them.
@@ -122,7 +119,7 @@ def test_lines_facing_the_camera_stay_straight(
     pixels: np.typing.NDArray[np.uint8] = pygame.surfarray.array3d(screen)
     marked = pixels.any(axis=2)
     assert marked[WIDTH // 2].any()
-    np.testing.assert_array_equal(marked[x], marked[WIDTH // 2])
+    np.testing.assert_array_equal(marked, np.broadcast_to(marked[WIDTH // 2], marked.shape))
 
 
 def test_door_ceiling_updates_after_level_layout_changes(

@@ -130,8 +130,9 @@ def fire_rocket(world: LevelState, enemy: Enemy) -> Rocket:
     state.enemies = [enemy]
     rocket = Rocket(2.9, 5.5, 0.0)
     state.rockets = [rocket]
+    sfx = MagicMock()
     for _ in range(100):
-        update_rockets(state, 16, MagicMock())
+        update_rockets(state, 16, sfx)
         if rocket.exploded:
             return rocket
     pytest.fail("rocket never detonated")

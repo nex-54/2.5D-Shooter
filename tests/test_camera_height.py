@@ -42,9 +42,10 @@ def test_horizon_stays_level_at_the_top_of_a_jump(
 def wall_rows(screen: pygame.Surface, world: LevelState, eye: float) -> tuple[int, int]:
     """First and last+1 rows of the flat-shaded wall in the center column."""
     draw_floor_ceiling(world, screen, 2.5, 5.5, 0.0, None, eye)
-    before = pygame.surfarray.array3d(screen)[WIDTH // 2]
+    column = screen.subsurface((WIDTH // 2, 0, 1, HEIGHT))
+    before = pygame.surfarray.array3d(column)[0]
     draw_3d(screen, cast_rays(world, 2.5, 5.5, 0.0), DepthBuffer(), None, None, eye)
-    after = pygame.surfarray.array3d(screen)[WIDTH // 2]
+    after = pygame.surfarray.array3d(column)[0]
     rows = np.flatnonzero((after != before).any(axis=1))
     return int(rows[0]), int(rows[-1]) + 1
 
