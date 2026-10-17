@@ -32,7 +32,9 @@ def preserve_random_state() -> Iterator[None]:
         random.setstate(rng_state)
 
 
-@pytest.mark.parametrize("level", (1, 10, 60, 1000))
+# Level 1 opens fewer extra walls, 10 fits every requested enemy, and 60 overflows the
+# free cells; any higher level only overflows further.
+@pytest.mark.parametrize("level", (1, 10, 60))
 @pytest.mark.parametrize("seed", range(50))
 def test_seeded_levels_have_reachable_unique_spawns_and_reserved_supplies(
     level: int, seed: int

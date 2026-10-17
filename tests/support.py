@@ -1,13 +1,22 @@
-"""Independent world, sound, and keyboard helpers for simulation tests."""
+"""Shared world, input, sound, and rendering helpers for tests."""
 
 from collections import defaultdict
-from typing import cast
-from unittest.mock import MagicMock
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import NamedTuple, cast
+from unittest.mock import MagicMock, patch
 
 import pygame
 
+from shooter.constants import EXPLOSION_DURATION, HEIGHT, WIDTH, Weapon
+from shooter.entities import HealthPack, Rocket, WeaponPickup
+from shooter.input import handle_events
 from shooter.map import MAP_H, MAP_W, LevelState
+from shooter.render_sprites import Billboard
+from shooter.state import GameState
 from shooter.types import Sfx
+
+BACKGROUND = (17, 29, 41)
 
 
 class SoundMocks(defaultdict[str, MagicMock]):
@@ -37,3 +46,62 @@ class Keys:
 
     def __getitem__(self, key: int) -> bool:
         return key in self.down
+
+
+def send_events(state: GameState, sfx: Sfx, pressed: set[int], *events: pygame.event.Event) -> bool:
+    """Deliver one event batch through handle_events; returns False when the game quits."""
+    with patch("shooter.input.pygame.event.get", return_value=list(events)):
+        return handle_events(state, sfx, pressed)
+
+
+def weapon_name(weapon: Weapon) -> str:
+    """Readable pytest id for a Weapon parameter."""
+    return weapon.name.lower()
+
+
+def make_screen() -> pygame.Surface:
+    screen = pygame.Surface((WIDTH, HEIGHT))
+    screen.fill(BACKGROUND)
+    return screen
+
+
+@contextmanager
+def surface_allocations() -> Generator[MagicMock, None, None]:
+    """Record new surfaces, failing any larger than the viewport before allocating it."""
+    surface_type = pygame.Surface
+
+    def bounded_surface(size: tuple[int, int], flags: int = 0) -> pygame.Surface:
+        assert size[0] <= WIDTH
+        assert size[1] <= HEIGHT
+        return surface_type(size, flags)
+
+    allocate = MagicMock(side_effect=bounded_surface)
+    # Replacing pygame.Surface itself also records DepthBuffer's partial-sprite layers.
+    with patch("pygame.Surface", allocate):
+        yield allocate
+
+
+def exploding_rocket(x: float, y: float) -> Rocket:
+    """An explosion with a quarter of its duration left; its core is a quarter opaque."""
+    rocket = Rocket(x, y, 0.0)
+    rocket.exploded = True
+    rocket.explosion_timer = EXPLOSION_DURATION // 4
+    return rocket
+
+
+class ForegroundSprites(NamedTuple):
+    """One still sprite of each non-enemy kind at the same spot."""
+
+    health: HealthPack
+    weapon: WeaponPickup
+    rocket: Rocket
+    explosion: Rocket
+    label: Billboard
+
+
+def foreground_sprites(x: float, y: float = 5.5) -> ForegroundSprites:
+    health = HealthPack(x, y)
+    weapon = WeaponPickup(x, y, Weapon.SHOTGUN)
+    health.anim_time = weapon.anim_time = 0.0
+    label = Billboard("TEST", x, y, (20, 20, 80))
+    return ForegroundSprites(health, weapon, Rocket(x, y, 0.0), exploding_rocket(x, y), label)

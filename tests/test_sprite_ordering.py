@@ -9,22 +9,16 @@ import pygame
 import pygame.freetype
 import pytest
 
-from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH, Weapon
+from shooter.constants import EYE_HEIGHT, HEIGHT, WIDTH
 from shooter.entities import Boss, Enemy, HealthPack, Rocket, WeaponPickup
-from shooter.map import LevelState
 from shooter.occlusion import DepthBuffer
 from shooter.render_game import draw_frame
 from shooter.render_sprites import Billboard, Camera, draw_enemy, draw_world_sprites
 from shooter.state import GameState
 from shooter.textures import generate_textures
+from tests.support import ForegroundSprites, foreground_sprites, make_screen
 
 Sprite = Enemy | HealthPack | WeaponPickup | Rocket | Billboard
-
-
-def make_screen() -> pygame.Surface:
-    screen = pygame.Surface((WIDTH, HEIGHT))
-    screen.fill((17, 29, 41))
-    return screen
 
 
 def draw_sprites(
@@ -74,39 +68,23 @@ def assert_composition(
         assert pygame.image.tobytes(actual, "RGB") == expected_pixels
 
 
-def make_foreground_objects(x: float) -> list[Sprite]:
-    health = HealthPack(x, 5.5)
-    weapon = WeaponPickup(x, 5.5, Weapon.SHOTGUN)
-    health.anim_time = weapon.anim_time = 0.0
-    rocket = Rocket(x, 5.5, 0.0)
-    explosion = Rocket(x, 5.5, 0.0)
-    explosion.exploded = True
-    explosion.explosion_timer = EXPLOSION_DURATION // 4
-    label = Billboard("TEST", x, 5.5, (20, 20, 80))
-    return [health, weapon, rocket, explosion, label]
-
-
-@pytest.mark.parametrize(
-    "sprite_index", range(5), ids=("health", "weapon", "rocket", "explosion", "label")
-)
+@pytest.mark.parametrize("sprite_index", range(5), ids=ForegroundSprites._fields)
 def test_near_enemy_covers_distant_pickups_effects_and_labels(
     sprite_index: int, depth: DepthBuffer, font: pygame.freetype.Font
 ) -> None:
     enemy = Enemy(4.5, 5.5)
     enemy.anim_time = 0.0
-    farther = make_foreground_objects(6.5)[sprite_index]
+    farther = foreground_sprites(6.5)[sprite_index]
     assert_composition(depth, font, farther, enemy)
 
 
-@pytest.mark.parametrize(
-    "sprite_index", range(5), ids=("health", "weapon", "rocket", "explosion", "label")
-)
+@pytest.mark.parametrize("sprite_index", range(5), ids=ForegroundSprites._fields)
 def test_near_pickups_effects_and_labels_cover_distant_enemy(
     sprite_index: int, depth: DepthBuffer, font: pygame.freetype.Font
 ) -> None:
     enemy = Enemy(6.5, 5.5)
     enemy.anim_time = 0.0
-    nearer = make_foreground_objects(4.5)[sprite_index]
+    nearer = foreground_sprites(4.5)[sprite_index]
     assert_composition(depth, font, enemy, nearer)
 
 
@@ -115,8 +93,8 @@ def test_near_pickups_effects_and_labels_cover_distant_enemy(
 def test_pickups_sort_within_and_between_types(
     farther_index: int, nearer_index: int, depth: DepthBuffer, font: pygame.freetype.Font
 ) -> None:
-    nearer = make_foreground_objects(4.5)[nearer_index]
-    farther = make_foreground_objects(6.5)[farther_index]
+    nearer = foreground_sprites(4.5)[nearer_index]
+    farther = foreground_sprites(6.5)[farther_index]
     assert_composition(depth, font, farther, nearer)
 
 
@@ -142,32 +120,37 @@ def test_boss_label_stays_over_its_boss_at_equal_depth(
     assert_composition(depth, font, boss, label)
 
 
-@pytest.mark.parametrize(
-    "sprite_index", range(5), ids=("health", "weapon", "rocket", "explosion", "label")
-)
-def test_mixed_sprites_preserve_wall_clipping_at_jump_height(
+@pytest.mark.parametrize("sprite_index", range(5), ids=ForegroundSprites._fields)
+def test_partial_wall_cover_keeps_depth_order_at_jump_height(
     sprite_index: int, depth: DepthBuffer, font: pygame.freetype.Font
 ) -> None:
     depth.block_column(0, WIDTH, 1.0, 0, HEIGHT // 2)
     enemy = Enemy(4.5, 5.5)
     enemy.anim_time = 0.0
-    farther = make_foreground_objects(6.5)[sprite_index]
+    farther = foreground_sprites(6.5)[sprite_index]
     assert_composition(depth, font, farther, enemy, eye_height=EYE_HEIGHT + 0.4)
 
+
+def test_mixed_sprites_preserve_wall_clipping_at_jump_height(
+    depth: DepthBuffer, font: pygame.freetype.Font
+) -> None:
+    depth.block_column(0, WIDTH, 1.0, 0, HEIGHT // 2)
+    enemy = Enemy(4.5, 5.5)
+    enemy.anim_time = 0.0
     screen = make_screen()
+    blank = pygame.image.tobytes(screen, "RGB")
     covered = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
     before = pygame.image.tobytes(screen.subsurface(covered), "RGB")
     draw_sprites(
-        depth, font, screen, [enemy, *make_foreground_objects(6.5)], eye_height=EYE_HEIGHT + 0.4
+        depth, font, screen, [enemy, *foreground_sprites(6.5)], eye_height=EYE_HEIGHT + 0.4
     )
+    assert pygame.image.tobytes(screen, "RGB") != blank
     assert pygame.image.tobytes(screen.subsurface(covered), "RGB") == before
 
 
 def test_game_frame_keeps_distant_pickup_behind_enemy(
-    depth: DepthBuffer, font: pygame.freetype.Font, world: LevelState
+    depth: DepthBuffer, font: pygame.freetype.Font, state: GameState
 ) -> None:
-    state = GameState()
-    state.world = world
     state.px, state.py = 2.5, 5.5
     enemy = Enemy(4.5, 5.5)
     health = HealthPack(6.5, 5.5)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,6 +11,7 @@ from shooter.combat import update_rockets
 from shooter.entities import Enemy, Rocket, hitscan
 from shooter.map import LevelState
 from shooter.state import GameState
+from shooter.types import Sfx
 
 
 def assert_sight_both_directions(
@@ -107,30 +107,25 @@ def test_wall_corners_block_hitscan_and_enemy_detection(world: LevelState) -> No
     assert not enemy.attacking
 
 
-def test_wall_corner_shields_enemy_from_rocket_splash(world: LevelState) -> None:
-    world.maze[3][3] = 1
-    state = GameState()
-    state.world = world
+def test_wall_corner_shields_enemy_from_rocket_splash(sfx: Sfx, state: GameState) -> None:
+    state.world.maze[3][3] = 1
     state.px, state.py = 2.5, 3.2
     sheltered = Enemy(3.2, 2.9)
     exposed = Enemy(2.85, 2.5)
     state.enemies = [sheltered, exposed]
     rocket = Rocket(2.9, 3.2, 0.0)
     state.rockets = [rocket]
-    update_rockets(state, 16, MagicMock())
+    update_rockets(state, 16, sfx)
     assert rocket.exploded
     assert sheltered.hp == sheltered.max_hp
     assert not exposed.alive
 
 
-def fire_rocket(world: LevelState, enemy: Enemy) -> Rocket:
-    state = GameState()
-    state.world = world
+def fire_rocket(sfx: Sfx, state: GameState, enemy: Enemy) -> Rocket:
     state.px, state.py = 2.5, 5.5
     state.enemies = [enemy]
     rocket = Rocket(2.9, 5.5, 0.0)
     state.rockets = [rocket]
-    sfx = MagicMock()
     for _ in range(100):
         update_rockets(state, 16, sfx)
         if rocket.exploded:
@@ -138,24 +133,28 @@ def fire_rocket(world: LevelState, enemy: Enemy) -> Rocket:
     pytest.fail("rocket never detonated")
 
 
-def test_barriers_do_not_block_sight_shots_or_rockets(world: LevelState) -> None:
+def test_barriers_do_not_block_sight_shots_or_rockets(
+    sfx: Sfx, state: GameState, world: LevelState
+) -> None:
     world.maze[5][4] = gmap.BARRIER_TILE
     enemy = Enemy(6.5, 5.5)
     assert hitscan(world, [enemy], 2.5, 5.5, 0.0) is enemy
     enemy.update(world, 2.5, 5.5, 16)
     assert enemy.alert
-    rocket = fire_rocket(world, enemy)
+    rocket = fire_rocket(sfx, state, enemy)
     assert rocket.x > 5.0
     assert not enemy.alive
 
 
 @pytest.mark.parametrize("tile", (1, gmap.DOOR_TILE), ids=("wall", "door"))
-def test_walls_and_closed_doors_still_block(tile: int, world: LevelState) -> None:
+def test_walls_and_closed_doors_still_block(
+    tile: int, sfx: Sfx, state: GameState, world: LevelState
+) -> None:
     world.maze[5][4] = tile
     enemy = Enemy(6.5, 5.5)
     assert hitscan(world, [enemy], 2.5, 5.5, 0.0) is None
     enemy.update(world, 2.5, 5.5, 16)
     assert not enemy.alert
-    rocket = fire_rocket(world, enemy)
+    rocket = fire_rocket(sfx, state, enemy)
     assert rocket.x < 4.0
     assert enemy.alive

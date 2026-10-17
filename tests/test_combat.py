@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,6 +11,7 @@ from shooter.constants import DAMAGE_COOLDOWN_MS, PLAYER_MAX_HP, Weapon
 from shooter.entities import Boss, Enemy, Scout, Spider, apply_hit, hitscan
 from shooter.map import LevelState
 from shooter.state import GameState
+from shooter.types import Sfx
 from tests.support import SoundMocks
 
 
@@ -22,18 +22,11 @@ from tests.support import SoundMocks
 def test_hit_zone_matches_the_body_width_at_any_distance(
     radius_fraction: float, hits: bool, distance: float, world: LevelState
 ) -> None:
+    # A fixed aim cone fails both ends: it hit far misses and missed point-blank bodies.
     enemy = Enemy(2.5 + distance, 5.5)
     across = enemy.hit_radius * radius_fraction
     aim = math.asin(across / distance)
     assert (hitscan(world, [enemy], 2.5, 5.5, aim) is enemy) is hits
-
-
-def test_far_misses_miss_and_point_blank_body_shots_hit(world: LevelState) -> None:
-    # A fixed 0.15 rad cone hit the first and missed the second.
-    far = Enemy(2.5 + 8 * math.cos(0.14), 5.5 + 8 * math.sin(0.14))
-    assert hitscan(world, [far], 2.5, 5.5, 0.0) is None
-    near = Enemy(2.5 + 0.8 * math.cos(0.17), 5.5 + 0.8 * math.sin(0.17))
-    assert hitscan(world, [near], 2.5, 5.5, 0.0) is near
 
 
 def test_nearer_enemy_beside_the_line_does_not_take_the_shot(world: LevelState) -> None:
@@ -92,11 +85,9 @@ def test_damage_cooldown_blocks_other_attackers_until_it_expires(
     assert sounds["enemy_attack"].play.call_count == 2
 
 
-def test_released_barrels_coast_forward_to_a_stop() -> None:
-    state = GameState()
+def test_released_barrels_coast_forward_to_a_stop(sfx: Sfx, state: GameState) -> None:
     state.weapon = Weapon.GATLING
     state.mouse_held = True
-    sfx = MagicMock()
     for _ in range(20):
         update_combat(state, 16, sfx)
     state.mouse_held = False
@@ -118,11 +109,9 @@ def test_released_barrels_coast_forward_to_a_stop() -> None:
     ids=("enemy", "spider", "boss"),
 )
 def test_multi_damage_plays_one_sound_and_reports_death_only_once(
-    enemy_type: type[Enemy], sound: str
+    enemy_type: type[Enemy], sound: str, sfx: Sfx, sounds: SoundMocks
 ) -> None:
     enemy = enemy_type(5.5, 5.5)
-    sounds = SoundMocks()
-    sfx = sounds.sfx
     assert apply_hit(enemy, sfx, enemy.hp + 10)
     assert enemy.hp == 0
     assert not enemy.alive
@@ -132,10 +121,8 @@ def test_multi_damage_plays_one_sound_and_reports_death_only_once(
     sounds["enemy_hurt"].play.assert_not_called()
 
 
-def test_nonlethal_damage_and_zero_damage() -> None:
+def test_nonlethal_damage_and_zero_damage(sfx: Sfx, sounds: SoundMocks) -> None:
     enemy = Enemy(5.5, 5.5)
-    sounds = SoundMocks()
-    sfx = sounds.sfx
     assert not apply_hit(enemy, sfx, 2)
     assert enemy.hp == 1
     assert enemy.alive

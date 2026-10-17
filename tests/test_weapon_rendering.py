@@ -12,6 +12,7 @@ import pytest
 from shooter.constants import EMPTY_CLICK_DELAY, HEIGHT, WEAPONS, WIDTH, Weapon
 from shooter.render_weapon import draw_weapon
 from shooter.weapon_models import weapon_frame
+from tests.support import weapon_name
 
 
 @pytest.fixture
@@ -46,18 +47,14 @@ def pixels(surface: pygame.Surface) -> bytes:
     return pygame.image.tobytes(surface, "RGBA")
 
 
-@pytest.mark.parametrize(
-    "weapon", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
+@pytest.mark.parametrize("weapon", tuple(Weapon), ids=weapon_name)
 def test_empty_click_and_unequipped_cooldowns_do_not_animate(weapon: Weapon) -> None:
     idle = pixels(render(weapon))
     for timer in (EMPTY_CLICK_DELAY, WEAPONS[weapon].fire_interval_ms):
         assert pixels(render(weapon, timer=timer)) == idle
 
 
-@pytest.mark.parametrize(
-    "weapon", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
+@pytest.mark.parametrize("weapon", tuple(Weapon), ids=weapon_name)
 def test_firing_changes_each_weapon_and_returns_to_rest(weapon: Weapon) -> None:
     idle = pixels(render(weapon))
     fired = render(weapon, shooting=True, timer=WEAPONS[weapon].fire_interval_ms)
@@ -66,9 +63,7 @@ def test_firing_changes_each_weapon_and_returns_to_rest(weapon: Weapon) -> None:
         assert pixels(render(weapon, shooting=True, timer=expired)) == idle
 
 
-@pytest.mark.parametrize(
-    "weapon", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
+@pytest.mark.parametrize("weapon", tuple(Weapon), ids=weapon_name)
 def test_walk_sway_works_without_firing(weapon: Weapon) -> None:
     assert pixels(render(weapon, time=0.2)) != pixels(render(weapon, time=0.2, moving=True))
 
@@ -92,9 +87,7 @@ def test_slide_and_pump_move_while_the_weapon_body_stays_fixed(weapon: Weapon, p
 
 
 @pytest.mark.usefixtures("fresh_weapon_cache")
-@pytest.mark.parametrize(
-    "weapon", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
+@pytest.mark.parametrize("weapon", tuple(Weapon), ids=weapon_name)
 def test_rendering_does_not_consume_randomness_or_mutate_cached_art(weapon: Weapon) -> None:
     rng_state = random.getstate()
     pose = 1 if weapon == Weapon.NUKE else 0
@@ -117,9 +110,7 @@ def test_rendering_does_not_consume_randomness_or_mutate_cached_art(weapon: Weap
 
 
 @pytest.mark.parametrize("fraction", (0.0, 0.1, 0.4, 0.75, 1.0))
-@pytest.mark.parametrize(
-    "weapon", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
+@pytest.mark.parametrize("weapon", tuple(Weapon), ids=weapon_name)
 def test_models_and_flashes_preserve_the_aiming_area(fraction: float, weapon: Weapon) -> None:
     aiming_area = pygame.Rect(WIDTH // 2 - 50, HEIGHT // 2 - 50, 100, 100)
     interval = WEAPONS[weapon].fire_interval_ms
@@ -128,9 +119,7 @@ def test_models_and_flashes_preserve_the_aiming_area(fraction: float, weapon: We
     assert pygame.mask.from_surface(screen.subsurface(aiming_area)).count() == 0
 
 
-@pytest.mark.parametrize(
-    "weapon", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
+@pytest.mark.parametrize("weapon", tuple(Weapon), ids=weapon_name)
 def test_surface_clipping_applies_to_models_and_firing_effects(weapon: Weapon) -> None:
     clip = pygame.Rect(600, 530, 100, 120)
     timer = WEAPONS[weapon].fire_interval_ms

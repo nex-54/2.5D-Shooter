@@ -87,6 +87,11 @@ Use pytest, `test_*.py` files, and descriptive `test_*` functions with plain ass
   - `open_world()`: an empty map with border walls.
   - `SoundMocks`: pass `.sfx` into the code; index by name to assert `.play` calls.
   - `Keys(*down)`: a `KeyState` stand-in.
+  - `send_events(state, sfx, pressed, *events)`: run one event batch through `handle_events`.
+  - `weapon_name`: readable parametrize ids for `Weapon` values.
+  - `make_screen()`: a viewport surface filled with `BACKGROUND`.
+  - `surface_allocations()`: record `pygame.Surface` allocations, failing any larger than the viewport.
+  - `foreground_sprites(x)` and `exploding_rocket(x, y)`: still pickups, rockets, explosions, and labels.
 - Parametrize independent cases with readable IDs; create mutable entities inside tests or fixtures. Keep sequential cache invalidation and lifecycle checks within one test. Existing mocks use `unittest.mock`.
 - Simulation tests usually request `state` and `sfx`, edit maze tiles or place entities, then call `update_game(state, 16, Keys(), set(), sfx)`.
 - Rendering tests draw onto an off-screen `pygame.Surface((WIDTH, HEIGHT))` and check pixels. They need no display; request the `font` fixture when fonts are involved so FreeType initialization is restored after the test. Only `test_startup.py` launches the real app, in a subprocess with SDL dummy video/audio drivers.

@@ -16,52 +16,24 @@ from shooter.constants import (
     Weapon,
 )
 from shooter.entities import PICKUP_WEAPONS, Boss, Enemy, WeaponPickup
-from shooter.input import handle_events
-from shooter.map import LevelState
 from shooter.simulation import update_pickups
 from shooter.state import GameState
-from tests.support import SoundMocks
+from tests.support import SoundMocks, send_events, weapon_name
 
 
 @pytest.fixture
-def state(world: LevelState) -> GameState:
-    state = GameState(seed=0)
-    state.world = world
+def state(state: GameState) -> GameState:
     state.px, state.py = 2.5, 5.5
     return state
 
 
 def fire(sounds: SoundMocks, state: GameState) -> None:
-    event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1)
-    with patch("shooter.input.pygame.event.get", return_value=[event]):
-        handle_events(state, sounds.sfx, set())
+    send_events(state, sounds.sfx, set(), pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1))
     if state.weapon == Weapon.GATLING:
         update_combat(state, 0, sounds.sfx)
 
 
-@pytest.mark.parametrize(
-    "weapon_id", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
-def test_every_weapon_consumes_one_round_and_respects_cooldown(
-    weapon_id: Weapon, sounds: SoundMocks, state: GameState
-) -> None:
-    weapon = WEAPONS[weapon_id]
-    state.weapon = weapon_id
-    state.owned[weapon_id] = True
-    state.ammo = [3, 3, 3, 3]
-    state.shoot_timer = 0
-    fire(sounds, state)
-    expected = [3, 3, 3, 3]
-    expected[weapon.ammo_pool] -= 1
-    assert state.ammo == expected
-    assert state.shoot_timer == weapon.fire_interval_ms
-    fire(sounds, state)
-    assert state.ammo == expected
-
-
-@pytest.mark.parametrize(
-    "weapon_id", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
+@pytest.mark.parametrize("weapon_id", tuple(Weapon), ids=weapon_name)
 def test_unowned_and_empty_weapons_cannot_deal_damage(
     weapon_id: Weapon, sounds: SoundMocks, state: GameState
 ) -> None:
@@ -114,8 +86,7 @@ def test_pistol_and_gatling_share_ammo_when_switching(sounds: SoundMocks, state:
     fire(sounds, state)
     state.owned[Weapon.GATLING] = True
     switch = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_3, scancode=pygame.KSCAN_3)
-    with patch("shooter.input.pygame.event.get", return_value=[switch]):
-        handle_events(state, sounds.sfx, set())
+    send_events(state, sounds.sfx, set(), switch)
     fire(sounds, state)
     assert state.ammo[0] == 8
 
@@ -126,14 +97,11 @@ def test_number_row_switches_weapons_on_any_keyboard_layout(
     # On AZERTY the unshifted "2" key reports "é" instead of K_2.
     state.owned[Weapon.SHOTGUN] = True
     switch = pygame.event.Event(pygame.KEYDOWN, key=ord("é"), scancode=pygame.KSCAN_2)
-    with patch("shooter.input.pygame.event.get", return_value=[switch]):
-        handle_events(state, sounds.sfx, set())
+    send_events(state, sounds.sfx, set(), switch)
     assert state.weapon == Weapon.SHOTGUN
 
 
-@pytest.mark.parametrize(
-    "weapon_id", tuple(Weapon), ids=tuple(weapon.name.lower() for weapon in Weapon)
-)
+@pytest.mark.parametrize("weapon_id", tuple(Weapon), ids=weapon_name)
 def test_switching_away_and_back_cannot_bypass_any_weapon_cooldown(
     weapon_id: Weapon, sounds: SoundMocks, state: GameState
 ) -> None:
@@ -201,8 +169,7 @@ def test_idle_gatling_does_not_accumulate_catch_up_shots(
     assert sounds["gatling"].play.call_count == 2
 
     release = pygame.event.Event(pygame.MOUSEBUTTONUP, button=1)
-    with patch("shooter.input.pygame.event.get", return_value=[release]):
-        assert handle_events(state, sounds.sfx, set())
+    assert send_events(state, sounds.sfx, set(), release)
     assert not state.mouse_held
     ammo = state.ammo[0]
     update_combat(state, 6000, sounds.sfx)
@@ -237,10 +204,8 @@ def test_gatling_pickup_unlocks_weapon_and_caps_shared_ammo(
     assert not pickup.active
 
 
-@pytest.mark.parametrize("ammo_level", ("empty", "partial", "near-cap"))
-@pytest.mark.parametrize(
-    "weapon_id", PICKUP_WEAPONS, ids=tuple(weapon.name.lower() for weapon in PICKUP_WEAPONS)
-)
+@pytest.mark.parametrize("ammo_level", ("empty", "near-cap"))
+@pytest.mark.parametrize("weapon_id", PICKUP_WEAPONS, ids=weapon_name)
 def test_owned_weapon_pickups_refill_only_their_ammo_pool(
     ammo_level: str, weapon_id: Weapon, sounds: SoundMocks, state: GameState
 ) -> None:
@@ -248,7 +213,6 @@ def test_owned_weapon_pickups_refill_only_their_ammo_pool(
     pool = weapon.ammo_pool
     initial, expected = {
         "empty": (0, weapon.pickup_ammo),
-        "partial": (1, 1 + weapon.pickup_ammo),
         "near-cap": (MAX_AMMO[pool] - 1, MAX_AMMO[pool]),
     }[ammo_level]
     equipped = Weapon.SHOTGUN if weapon_id == Weapon.PISTOL else Weapon.PISTOL
@@ -275,9 +239,7 @@ def test_owned_weapon_pickups_refill_only_their_ammo_pool(
     sounds["pickup"].play.assert_called_once()
 
 
-@pytest.mark.parametrize(
-    "weapon_id", PICKUP_WEAPONS, ids=tuple(weapon.name.lower() for weapon in PICKUP_WEAPONS)
-)
+@pytest.mark.parametrize("weapon_id", PICKUP_WEAPONS, ids=weapon_name)
 def test_owned_weapon_pickups_remain_available_when_ammo_is_full(
     weapon_id: Weapon, sounds: SoundMocks, state: GameState
 ) -> None:

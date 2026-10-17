@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import numpy as np
 import pygame
 import pygame.freetype
 import pytest
 
 from shooter import map as gmap
-from shooter.constants import EXPLOSION_DURATION, EYE_HEIGHT, HEIGHT, WIDTH, Weapon
-from shooter.entities import Boss, Enemy, HealthPack, Rocket, Scout, Spider, WeaponPickup
+from shooter.constants import EYE_HEIGHT
+from shooter.entities import Boss, Enemy, Scout, Spider
 from shooter.map import LevelState
 from shooter.occlusion import DepthBuffer
 from shooter.raycaster import cast_rays
 from shooter.render_sprites import (
-    Billboard,
     Camera,
     draw_billboard,
     draw_enemy,
@@ -26,6 +23,7 @@ from shooter.render_sprites import (
 )
 from shooter.render_world import draw_3d
 from shooter.types import DoorAnim, DoorAnimMap
+from tests.support import ForegroundSprites, foreground_sprites
 
 
 @pytest.fixture
@@ -210,7 +208,7 @@ def test_depth_is_cleared_between_frames(
     assert pygame.image.tobytes(screen, "RGB") != before
 
 
-@pytest.mark.parametrize("sprite_name", ("health", "weapon", "rocket", "explosion", "label"))
+@pytest.mark.parametrize("sprite_name", ForegroundSprites._fields)
 @pytest.mark.parametrize("tile", (gmap.BARRIER_TILE, 1), ids=("barrier", "wall"))
 def test_pickups_labels_and_projectiles_use_the_same_height_clipping(
     sprite_name: str,
@@ -222,20 +220,13 @@ def test_pickups_labels_and_projectiles_use_the_same_height_clipping(
     screen: pygame.Surface,
     world: LevelState,
 ) -> None:
-    health = HealthPack(6.5, 5.5)
-    weapon = WeaponPickup(6.5, 5.5, Weapon.SHOTGUN)
-    rocket = Rocket(6.5, 5.5, 0.0)
-    explosion = Rocket(6.5, 5.5, 0.0)
-    explosion.exploded = True
-    explosion.explosion_timer = EXPLOSION_DURATION // 4
-    label = Billboard("TEST", 6.5, 5.5, (20, 20, 80))
-    health.anim_time = weapon.anim_time = 0.0
+    sprites = foreground_sprites(6.5)
     drawers = {
-        "health": lambda: draw_health_pack(screen, health, camera, depth),
-        "weapon": lambda: draw_weapon_pickup(screen, weapon, camera, depth),
-        "rocket": lambda: draw_rocket(screen, rocket, camera, depth),
-        "explosion": lambda: draw_rocket(screen, explosion, camera, depth),
-        "label": lambda: draw_billboard(screen, font, label, camera, depth),
+        "health": lambda: draw_health_pack(screen, sprites.health, camera, depth),
+        "weapon": lambda: draw_weapon_pickup(screen, sprites.weapon, camera, depth),
+        "rocket": lambda: draw_rocket(screen, sprites.rocket, camera, depth),
+        "explosion": lambda: draw_rocket(screen, sprites.explosion, camera, depth),
+        "label": lambda: draw_billboard(screen, font, sprites.label, camera, depth),
     }
     world.maze[5][4] = tile
     draw = drawers[sprite_name]
@@ -248,24 +239,3 @@ def test_pickups_labels_and_projectiles_use_the_same_height_clipping(
     else:
         assert np.any(after != before)
         np.testing.assert_array_equal(after[:, 469:640], before[:, 469:640])
-
-
-def test_partially_hidden_close_explosion_keeps_allocations_bounded(
-    depth: DepthBuffer, screen: pygame.Surface
-) -> None:
-    screen.fill((9, 11, 13))
-    depth.block_column(0, WIDTH, 0.01, HEIGHT // 2)
-    rocket = Rocket(0.15, 0.0, 0.0)
-    rocket.exploded = True
-    rocket.explosion_timer = EXPLOSION_DURATION // 4
-    surface_type = pygame.Surface
-
-    def bounded_surface(size: tuple[int, int], flags: int = 0) -> pygame.Surface:
-        assert size[0] <= WIDTH
-        assert size[1] <= HEIGHT
-        return surface_type(size, flags)
-
-    with patch("shooter.render_sprites.pygame.Surface", side_effect=bounded_surface):
-        draw_rocket(screen, rocket, Camera(0.0, 0.0, 0.0), depth)
-    assert screen.get_at((WIDTH // 2, 100))[:3] != (9, 11, 13)
-    assert screen.get_at((WIDTH // 2, HEIGHT - 100))[:3] == (9, 11, 13)

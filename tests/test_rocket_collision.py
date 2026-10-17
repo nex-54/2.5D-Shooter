@@ -1,7 +1,6 @@
 """Projectile contact must agree with walls and splash visibility at every step."""
 
 import math
-from unittest.mock import patch
 
 import pygame
 import pytest
@@ -9,11 +8,10 @@ import pytest
 from shooter.combat import update_rockets
 from shooter.constants import EXPLOSION_DURATION, PLAYER_MAX_HP, WEAPONS, Weapon
 from shooter.entities import Boss, Enemy, Rocket
-from shooter.input import handle_events
 from shooter.map import BARRIER_TILE, DOOR_TILE
 from shooter.state import GameState
 from shooter.types import Sfx
-from tests.support import SoundMocks
+from tests.support import SoundMocks, send_events
 
 
 @pytest.mark.parametrize("reverse", (False, True), ids=("forward", "reverse"))
@@ -69,9 +67,7 @@ def test_muzzle_hits_close_wall_and_applies_self_damage_on_clear_side(
     state.weapon = Weapon.ROCKETS
     state.owned[Weapon.ROCKETS] = True
     state.ammo[WEAPONS[Weapon.ROCKETS].ammo_pool] = 1
-    click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1)
-    with patch("shooter.input.pygame.event.get", return_value=[click]):
-        handle_events(state, sfx, set())
+    send_events(state, sfx, set(), pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1))
     rocket = state.rockets[0]
     assert rocket.exploded
     assert rocket.x < 5

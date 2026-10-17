@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import math
-from unittest.mock import patch
 
 import pygame
 import pytest
 
 from shooter.constants import EYE_HEIGHT, HEIGHT, WIDTH, Weapon
-from shooter.entities import PICKUP_WEAPONS, WeaponPickup
+from shooter.entities import WeaponPickup
 from shooter.occlusion import DepthBuffer
 from shooter.render_sprites import Camera, draw_weapon_pickup
-
-BACKGROUND = (17, 29, 41)
+from tests.support import BACKGROUND, make_screen, surface_allocations
 
 
 @pytest.fixture
@@ -21,12 +19,6 @@ def pickup() -> WeaponPickup:
     pickup = WeaponPickup(4.0, 0.0, Weapon.PISTOL)
     pickup.anim_time = math.pi / 4
     return pickup
-
-
-def make_screen() -> pygame.Surface:
-    screen = pygame.Surface((WIDTH, HEIGHT))
-    screen.fill(BACKGROUND)
-    return screen
 
 
 def draw_pickup(
@@ -38,24 +30,14 @@ def draw_pickup(
 
 
 @pytest.mark.parametrize("distance", (0.301, 0.31, 0.6))
-@pytest.mark.parametrize(
-    "weapon_type", PICKUP_WEAPONS, ids=tuple(weapon.name.lower() for weapon in PICKUP_WEAPONS)
-)
 def test_close_pickups_keep_allocations_within_viewport(
-    distance: float, weapon_type: Weapon, depth: DepthBuffer, pickup: WeaponPickup
+    distance: float, depth: DepthBuffer, pickup: WeaponPickup
 ) -> None:
-    surface_type = pygame.Surface
-
-    def bounded_surface(size: tuple[int, int], flags: int = 0) -> pygame.Surface:
-        assert size[0] <= WIDTH
-        assert size[1] <= HEIGHT
-        return surface_type(size, flags)
-
-    pickup.weapon_type = weapon_type
     pickup.x = distance
     screen = make_screen()
-    with patch("shooter.render_sprites.pygame.Surface", side_effect=bounded_surface) as allocate:
+    with surface_allocations() as allocate:
         draw_pickup(depth, pickup, screen)
+    # Weapon icons are drawn with primitives, so the halo is the only surface.
     allocate.assert_called_once()
     assert screen.get_at((0, 0))[:3] != BACKGROUND
 
@@ -82,7 +64,6 @@ def test_surface_clip_and_wall_occlusion_preserve_visible_pixels(
 ) -> None:
     clip = pygame.Rect(80, 120, WIDTH - 160, HEIGHT - 240)
     pickup.x = distance
-    depth.clear()
     reference = make_screen()
     draw_pickup(depth, pickup, reference)
     expected = make_screen()
@@ -93,7 +74,7 @@ def test_surface_clip_and_wall_occlusion_preserve_visible_pixels(
         expected.fill(BACKGROUND, (0, HEIGHT // 2, WIDTH, HEIGHT // 2))
     actual = make_screen()
     actual.set_clip(clip)
-    with patch("shooter.render_sprites.pygame.Surface", wraps=pygame.Surface) as allocate:
+    with surface_allocations() as allocate:
         draw_pickup(depth, pickup, actual)
     assert allocate.call_count == (2 if occluded else 1)
     for call in allocate.call_args_list:
@@ -111,7 +92,7 @@ def test_invisible_pickup_allocates_nothing(
     before = pygame.image.tobytes(screen, "RGB")
     if hidden_by_wall:
         depth.block_column(0, WIDTH, 0.01)
-    with patch("shooter.render_sprites.pygame.Surface") as allocate:
+    with surface_allocations() as allocate:
         draw_pickup(depth, pickup, screen, shift=0 if hidden_by_wall else HEIGHT * 2)
     allocate.assert_not_called()
     assert pygame.image.tobytes(screen, "RGB") == before

@@ -1,7 +1,5 @@
 """Exercise update ordering, pause, level transitions, and restart together."""
 
-from unittest.mock import patch
-
 import pygame
 import pytest
 
@@ -13,12 +11,11 @@ from shooter.constants import (
     Weapon,
 )
 from shooter.entities import Boss, Enemy, HealthPack, Rocket
-from shooter.input import handle_events
 from shooter.map import DOOR_TILE
 from shooter.simulation import update_game
 from shooter.state import GameState, reset_game, start_level
 from shooter.types import DoorAnim, Sfx
-from tests.support import Keys, SoundMocks, open_world
+from tests.support import Keys, SoundMocks, send_events
 
 
 def tick(sfx: Sfx, state: GameState) -> bool:
@@ -51,19 +48,12 @@ def test_lethal_rocket_damage_also_precedes_pickups(sfx: Sfx, state: GameState) 
     assert pack.active
 
 
-@pytest.mark.parametrize(
-    "initial_hp, expected_hp",
-    ((5, 30), (PLAYER_MAX_HP - 5, PLAYER_MAX_HP)),
-    ids=("injured", "near-full"),
-)
-def test_health_pickups_heal_without_exceeding_maximum_hp(
-    initial_hp: int, expected_hp: int, sounds: SoundMocks, state: GameState
-) -> None:
-    state.hp = initial_hp
+def test_health_pickups_heal_an_injured_player(sounds: SoundMocks, state: GameState) -> None:
+    state.hp = 5
     pack = HealthPack(state.px, state.py)
     state.health_packs = [pack]
     tick(sounds.sfx, state)
-    assert state.hp == expected_hp
+    assert state.hp == 5 + pack.heal_amount
     assert not pack.active
     assert not state.game_over
     sounds["pickup"].play.assert_called_once()
@@ -79,6 +69,7 @@ def test_full_health_preserves_a_pickup_until_the_player_is_hurt(
     assert pack.active
     sounds["pickup"].play.assert_not_called()
 
+    # Healing stops at the maximum.
     state.hp -= 5
     tick(sounds.sfx, state)
     assert state.hp == PLAYER_MAX_HP
@@ -109,9 +100,7 @@ def test_spawn_grace_prevents_attacks_until_the_timer_expires(
 
 
 @pytest.mark.parametrize("status", ("paused", "game_over"))
-def test_pause_and_game_over_freeze_all_simulation(status: str, sfx: Sfx) -> None:
-    state = GameState(seed=0)
-    state.world = open_world()
+def test_pause_and_game_over_freeze_all_simulation(status: str, sfx: Sfx, state: GameState) -> None:
     setattr(state, status, True)
     state.shoot_timer = 200
     state.weapon = Weapon.GATLING
@@ -191,8 +180,7 @@ def test_restart_key_rebuilds_level_and_resets_inventory(sfx: Sfx, state: GameSt
     state.weapon_cooldowns = [500] * len(WEAPONS)
     state.rockets = [Rocket(3.5, 1.5, 0)]
     restart = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r, scancode=pygame.KSCAN_R)
-    with patch("shooter.input.pygame.event.get", return_value=[restart]):
-        assert handle_events(state, sfx, set())
+    assert send_events(state, sfx, set(), restart)
     assert not state.game_over
     assert state.hp == 100
     assert state.ammo == list(INITIAL_AMMO)
@@ -207,8 +195,7 @@ def test_restart_drops_movement_keys_from_the_previous_life(sfx: Sfx, state: Gam
     state.game_over = True
     pressed = {pygame.KSCAN_W, pygame.KSCAN_A}
     restart = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r, scancode=pygame.KSCAN_R)
-    with patch("shooter.input.pygame.event.get", return_value=[restart]):
-        handle_events(state, sfx, pressed)
+    send_events(state, sfx, pressed, restart)
     assert not state.game_over
     assert pressed == set()
     assert not update_game(state, 16, Keys(), pressed, sfx)
